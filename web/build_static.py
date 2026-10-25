@@ -23,6 +23,42 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 
+def https_hosts(server):
+    """The hosted page is https, and browsers (iPhone Safari above all) won't load http pictures or
+    streams into it. For each host that only got http links, try one of them over https."""
+    import urllib.parse
+    import urllib.request
+    samples = {}
+    for sid, *_ in server.SOURCES:
+        for c in server.catalog[sid]["cameras"]:
+            for u in (c[4], c[5]):
+                if u.startswith("http://"):
+                    picks = samples.setdefault(urllib.parse.urlsplit(u).netloc, [])
+                    if len(picks) < 3:  # one dead picture shouldn't condemn the whole host
+                        picks.append(u)
+    secure = set()
+    for host, picks in samples.items():
+        for u in picks:
+            try:
+                req = urllib.request.Request("https://" + u[7:].replace(" ", "%20"), headers={"User-Agent": server.UA})
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    r.read(1024)
+                secure.add(host)
+                break
+            except Exception:
+                pass
+    print(f"http-only hosts: {len(samples)}, also on https: {sorted(secure)}")
+    return secure
+
+
+def upgrade(url, secure):
+    """https version of an http link if its host serves https, else "" (it couldn't load anyway)."""
+    if not url.startswith("http://"):
+        return url
+    host = url[7:].split("/", 1)[0]
+    return "https://" + url[7:] if host in secure else ""
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(HERE, "site"))
@@ -43,6 +79,7 @@ def main():
     for t in jobs:
         t.join()
 
+    secure = https_hosts(server)
     sources, cameras = [], {}
     for sid, label, _, attr in server.SOURCES:
         entry = server.catalog[sid]
@@ -50,8 +87,9 @@ def main():
         cams = []
         for c in shown:
             img = "" if c[4].startswith("/") else c[4]  # /snap/... needs the app's server
-            if img or c[5]:
-                cams.append(c[:4] + [img] + c[5:])
+            img, video = upgrade(img, secure), upgrade(c[5], secure)
+            if img or video:
+                cams.append(c[:4] + [img, video] + c[6:])
         cameras[sid] = cams
         sources.append({"id": sid, "name": label, "attribution": attr, "count": len(cams), "hidden": hidden,
                         "updated": entry.get("updated", 0), "error": entry.get("error", "") if not cams else "",
