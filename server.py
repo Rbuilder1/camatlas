@@ -1088,7 +1088,8 @@ for _d in discovery["found"]:
     if _d["added"]:
         register_discovered(_d)
 
-# Set by the Android app: share_app("link") texts a download link, share_app("file") sends the APK itself.
+# Set by the Android app: share_app("text") opens a new text message with the download links,
+# share_app("link") offers the same message to any app, share_app("file") sends the APK itself.
 share_app = None
 
 
@@ -1258,7 +1259,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if share_app is None:
                 return self.send_json({"error": "Sharing works in the Android app"}, 404)
             try:
-                share_app("file" if self.read_body().get("how") == "file" else "link")
+                how = self.read_body().get("how")
+                share_app(how if how in ("text", "file") else "link")
             except Exception as e:
                 return self.send_json({"error": str(e)}, 500)
             return self.send_json({"ok": True})

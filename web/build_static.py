@@ -115,7 +115,8 @@ def main():
     marker = '<script src="vendor/leaflet.min.js"></script>'
     if marker not in page:
         sys.exit("index.html changed: can't find where to mark the page as static")
-    page = page.replace(marker, "<script>window.CAMATLAS_STATIC = true;</script>\n" + marker, 1)
+    page = page.replace(marker, "<script>window.CAMATLAS_STATIC = true; "
+                                "document.documentElement.classList.add('hosted');</script>\n" + marker, 1)
     with open(index, "w", encoding="utf-8") as f:
         f.write(page)
     open(os.path.join(args.out, ".nojekyll"), "w").close()  # serve vendor/ and dotfiles as-is

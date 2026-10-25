@@ -473,29 +473,33 @@ $('discoverBtn').onclick = async () => {
 // ------------------------------------------------------------------ share the app (Android)
 api('/api/app').then((a) => { $('shareRow').hidden = !a.share; }).catch(() => {});
 const shareApp = (how) => async () => {
-  if (STATIC) return shareSite();
+  if (STATIC) return how === 'text' ? textSite() : shareSite();
   try { await api('/api/share-app', { method: 'POST', body: JSON.stringify({ how }) }); }
   catch { toast('Couldn\'t open sharing'); }
 };
 
-// The hosted copy shares its own address through the phone's share sheet (Messages, Mail...).
+// The hosted copy shares its own address: as a new text message, or through the phone's share sheet.
 // Searching and re-downloading need the app's own server, so those controls go.
+const SITE_TEXT = 'Check out CamAtlas, a map of live public traffic and weather cameras.\n'
+  + 'iPhone: https://rbuilder1.github.io/camatlas/ (open in Safari, tap Share, then Add to Home Screen)\n'
+  + 'Android: https://github.com/Rbuilder1/camatlas/releases/latest/download/CamAtlas.apk';
+function textSite() {
+  // A new message in Messages with the text filled in; iPhones want "sms:&body=", Android "sms:?body=".
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  location.href = 'sms:' + (ios ? '&' : '?') + 'body=' + encodeURIComponent(SITE_TEXT);
+}
 async function shareSite() {
-  const url = location.origin + location.pathname.replace(/index\.html$/, '');
-  const text = 'CamAtlas: a map of live public traffic and weather cameras. On iPhone, open it in Safari, '
-    + 'then tap Share and "Add to Home Screen". Android app: '
-    + 'https://github.com/Rbuilder1/camatlas/releases/latest/download/CamAtlas.apk';
   try {
-    if (navigator.share) await navigator.share({ title: 'CamAtlas', text, url });
-    else { await navigator.clipboard.writeText(text + '\n' + url); toast('Link copied'); }
+    if (navigator.share) await navigator.share({ title: 'CamAtlas', text: SITE_TEXT });
+    else { await navigator.clipboard.writeText(SITE_TEXT); toast('Link copied'); }
   } catch (e) { if (e.name !== 'AbortError') toast('Couldn\'t open sharing'); }
 }
 if (STATIC) {
-  $('shareLinkBtn').textContent = 'Share CamAtlas';
   $('shareFileBtn').remove();
   $('refreshBtn').parentElement.remove();
   $('discoverBtn').parentElement.remove();
 }
+$('shareTextBtn').onclick = shareApp('text');
 $('shareLinkBtn').onclick = shareApp('link');
 if ($('shareFileBtn')) $('shareFileBtn').onclick = shareApp('file');
 

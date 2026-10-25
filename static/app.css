@@ -10,14 +10,21 @@
   --accent: #f2f3f5;
   --radius: 10px;
   --shadow: 0 10px 30px rgba(0, 0, 0, .45);
-  /* iPhone notch / status bar and home indicator. Launched from the home screen the page runs
-     full-screen under a see-through status bar (black-translucent), so everything pinned to an
-     edge has to clear these; they are 0 everywhere else. */
+  --st: 0px;
+  --sb: 0px;
+  --sl: 0px;
+  --sr: 0px;
+  color-scheme: dark;
+}
+/* iPhone notch / status bar and home indicator. The hosted page (class "hosted", set by
+   web/build_static.py), launched from an iPhone's home screen, runs full-screen under a see-through
+   status bar (black-translucent), so everything pinned to an edge has to clear these. Not in the
+   Android app: its WebView reports the status bar too, though the app already sits below it. */
+html.hosted {
   --st: env(safe-area-inset-top, 0px);
   --sb: env(safe-area-inset-bottom, 0px);
   --sl: env(safe-area-inset-left, 0px);
   --sr: env(safe-area-inset-right, 0px);
-  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
