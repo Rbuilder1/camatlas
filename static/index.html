@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CamAtlas</title>
+<link rel="icon" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0c0f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CamAtlas">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="vendor/leaflet.min.css">
+<link rel="stylesheet" href="vendor/MarkerCluster.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><img src="icon.svg" alt=""><span>CamAtlas</span></div>
+  <div class="search">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    <input id="q" type="search" placeholder="Search places &amp; cameras" autocomplete="off" spellcheck="false">
+    <kbd>/</kbd>
+    <div id="results" class="results" hidden></div>
+  </div>
+  <button id="liveBtn" class="chip" title="Only cameras with live video or clips (L)"><i class="dot"></i>Live only</button>
+  <button id="flockSw" class="switch" role="switch" aria-checked="true" title="Show or hide Flock ALPR cameras (C)">
+    <span class="track"><span class="knob"></span></span><span class="lbl">Flock</span>
+  </button>
+  <div class="spacer"></div>
+  <button id="favBtn" class="chip icon" title="Favorites &amp; saved walls (F)">
+    <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span id="favCount"></span>
+  </button>
+  <button id="monitorBtn" class="chip strong" title="Monitor: drag a box to open every camera inside (M)">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Monitor
+  </button>
+</header>
+
+<main id="map"></main>
+
+<button id="layersBtn" class="chip floating" title="Sources &amp; settings">
+  <svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>Sources
+</button>
+
+<div class="mapctl">
+  <button id="basemap" title="Switch to satellite view"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></button>
+  <button id="zin" title="Zoom in">+</button>
+  <button id="zout" title="Zoom out">&minus;</button>
+  <button id="locate" title="Find me: track your live location on the map"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+</div>
+
+<div id="stats" class="stats">Loading cameras…</div>
+<div id="toast" class="toast" hidden></div>
+<div id="drawHint" class="drawhint" hidden>Drag a box over the cameras you want on the wall · <b>Esc</b> to cancel</div>
+
+<!-- Sources / settings panel -->
+<aside id="layers" class="panel left" hidden>
+  <div class="phead"><h2>Sources</h2><button class="x" data-close="layers">&times;</button></div>
+  <div id="shareRow" class="psec row" hidden>
+    <button id="shareLinkBtn" class="btn">Text a download link</button>
+    <button id="shareFileBtn" class="btn ghost">Send the app file</button>
+  </div>
+  <div id="sourceList" class="srclist"></div>
+  <div class="psec row">
+    <button id="refreshBtn" class="btn ghost">Re-download camera lists</button>
+  </div>
+  <div class="psec">
+    <button id="discoverBtn" class="btn">Find more cameras</button>
+    <p id="discStatus" class="muted small"></p>
+    <div id="discList" class="disclist"></div>
+  </div>
+  <p class="muted small" style="padding:0 16px">Basemap Esri, HERE, Garmin, © OpenStreetMap contributors. Place search by Nominatim / OpenStreetMap. Each camera's image belongs to the agency listed above.</p>
+</aside>
+
+<!-- Favorites panel -->
+<aside id="favs" class="panel right" hidden>
+  <div class="phead"><h2>Favorites</h2><button class="x" data-close="favs">&times;</button></div>
+  <div class="psec"><h3>Saved walls</h3><div id="wallList" class="list"></div></div>
+  <div class="psec"><h3>Cameras</h3>
+    <div id="favList" class="list"></div>
+    <button id="favWall" class="btn ghost">Open all favorites on a wall</button>
+  </div>
+</aside>
+
+<!-- Single camera viewer -->
+<aside id="viewer" class="panel right viewer" hidden>
+  <div class="phead">
+    <div><h2 id="vName"></h2><div id="vMeta" class="muted"></div></div>
+    <button class="x" data-close="viewer">&times;</button>
+  </div>
+  <div id="vMedia" class="media"></div>
+  <div class="vbar">
+    <span id="vAge" class="muted small"></span>
+    <div class="spacer"></div>
+    <button id="vFav" class="btn ghost">☆ Favorite</button>
+    <button id="vWall" class="btn ghost">+ Wall</button>
+    <button id="vZoom" class="btn ghost">Zoom</button>
+  </div>
+  <div class="psec"><h3>Nearby</h3><div id="vNear" class="near"></div></div>
+</aside>
+
+<!-- Monitor wall -->
+<section id="wall" class="wall" hidden>
+  <div class="wbar">
+    <h2 id="wTitle">Monitor</h2>
+    <span id="wCount" class="muted"></span>
+    <div class="spacer"></div>
+    <label>Columns <select id="wCols"><option value="0">Auto</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>8</option></select></label>
+    <label>Refresh <select id="wRate"><option value="5">5 s</option><option value="10" selected>10 s</option><option value="30">30 s</option><option value="60">60 s</option></select></label>
+    <label class="check"><input id="wLive" type="checkbox"> Play video</label>
+    <button id="wSave" class="btn ghost">Save wall</button>
+    <button id="wClose" class="btn">Close <kbd>Esc</kbd></button>
+  </div>
+  <div id="wGrid" class="grid"></div>
+</section>
+
+<!-- Big-screen Street View of a Flock camera spot -->
+<section id="svBig" class="wall svbig" hidden>
+  <div class="wbar">
+    <h2 id="svTitle">Flock ALPR camera</h2>
+    <span id="svMeta" class="muted"></span>
+    <div class="spacer"></div>
+    <a id="svOpen" class="btn ghost" target="_blank" rel="noopener">Open in Google Maps</a>
+    <button id="svFull" class="btn ghost">Full screen</button>
+    <button id="svClose" class="btn">Close <kbd>Esc</kbd></button>
+  </div>
+  <iframe id="svFrame" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+</section>
+
+<script src="vendor/leaflet.min.js"></script>
+<script src="vendor/leaflet.markercluster.js"></script>
+<script src="vendor/hls.min.js"></script>
+<script src="app.js"></script>
+<script>
+  // Register the service worker so the app is installable (Add to Home screen / Install app).
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+</script>
+</body>
+</html>
