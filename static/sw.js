@@ -1,10 +1,10 @@
 /* CamAtlas service worker — makes the app installable and launchable offline.
  * The app shell (page, styles, map libraries, icons) is cached so the app opens
  * without a network; camera data (/api/*, tiles, camera images) is always live. */
-const SHELL = 'camatlas-shell-v2';
+const SHELL = 'camatlas-shell-v3';
 const SHELL_FILES = [
   './', './index.html', './app.css', './app.js', './icon.svg',
-  './icon-192.png', './icon-512.png', './manifest.webmanifest',
+  './icon-192.png', './icon-512.png', './apple-touch-icon.png', './manifest.webmanifest',
   './vendor/leaflet.min.js', './vendor/leaflet.min.css',
   './vendor/leaflet.markercluster.js', './vendor/MarkerCluster.css',
   './vendor/hls.min.js',

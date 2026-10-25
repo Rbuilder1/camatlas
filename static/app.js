@@ -498,6 +498,23 @@ if (STATIC) {
   $('shareFileBtn').remove();
   $('refreshBtn').parentElement.remove();
   $('discoverBtn').parentElement.remove();
+  showInstallGuide();
+}
+
+// iPhones can't install apps from a link, but a home-screen web app is the next best thing; few people
+// know the steps, so the hosted page walks iPhone visitors through them. Not shown once it's running
+// from the home screen, and "Not now" keeps it away for a week.
+function showInstallGuide() {
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);  // iPadOS reports a Mac
+  const installed = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  if (!ios || installed || Date.now() - store.get('installLater', 0) < 7 * 864e5) return;
+  if (/CriOS|FxiOS|EdgiOS/.test(navigator.userAgent)) {  // Chrome / Firefox / Edge on iPhone
+    $('installStep1').innerHTML = 'Tap <b>Share</b> <svg viewBox="0 0 24 24" class="ios-share"><path d="M12 3v12M8 7l4-4 4 4M5 11v9h14v-9"/></svg> '
+      + 'in the address bar (or open this page in <b>Safari</b>)';
+  }
+  setTimeout(() => { $('installSheet').hidden = false; }, 1500);
+  $('installClose').onclick = () => { $('installSheet').hidden = true; store.set('installLater', Date.now()); };
 }
 $('shareTextBtn').onclick = shareApp('text');
 $('shareLinkBtn').onclick = shareApp('link');

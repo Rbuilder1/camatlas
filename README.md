@@ -9,6 +9,21 @@ favorites, and a Monitor wall of many cameras at once.
 Open **https://rbuilder1.github.io/camatlas/** in Safari, tap **Share**, then **Add to Home Screen**.
 It then opens full-screen from its own icon like any other app. Camera lists refresh every 6 hours.
 
+### iPhone app file (advanced, optional)
+
+There's also a native iPhone build: **[CamAtlas-unsigned.ipa](https://github.com/Rbuilder1/camatlas/releases/download/ios-latest/CamAtlas-unsigned.ipa)**.
+Apple only installs signed apps, so without a paid developer account it has to be signed with your own
+Apple ID by a sideloading tool:
+
+1. Install **SideStore** (sidestore.io) or **AltStore** (altstore.io) on your iPhone, following their setup
+   guide (needs a computer once).
+2. Download `CamAtlas-unsigned.ipa` on the iPhone, open it with SideStore/AltStore, and sign in with your Apple ID.
+3. On the iPhone: Settings → General → VPN & Device Management → trust your Apple ID; also turn on
+   Settings → Privacy & Security → Developer Mode.
+
+Free Apple IDs: the app must be refreshed every 7 days (SideStore/AltStore do it for you) and only 3
+sideloaded apps at a time. For everyone else, the web app above is simpler.
+
 ## Android
 
 1. On your phone, download **[CamAtlas.apk](https://github.com/Rbuilder1/camatlas/releases/latest/download/CamAtlas.apk)**.
