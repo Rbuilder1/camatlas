@@ -6,7 +6,7 @@ import SwiftUI
 import WebKit
 
 let siteURL = URL(string: "https://rbuilder1.github.io/camatlas/")!
-let background = UIColor(red: 11 / 255, green: 12 / 255, blue: 15 / 255, alpha: 1)
+let appBackground = UIColor(red: 11 / 255, green: 12 / 255, blue: 15 / 255, alpha: 1)
 
 @main
 struct CamAtlasApp: App {
@@ -14,7 +14,7 @@ struct CamAtlasApp: App {
         WindowGroup {
             CamAtlasView()
                 .ignoresSafeArea()
-                .background(Color(background))
+                .background(Color(appBackground))
                 .preferredColorScheme(.dark)
         }
     }
@@ -32,8 +32,8 @@ struct CamAtlasView: UIViewRepresentable {
         web.navigationDelegate = context.coordinator
         web.uiDelegate = context.coordinator
         web.isOpaque = false
-        web.backgroundColor = background
-        web.scrollView.backgroundColor = background
+        web.backgroundColor = appBackground
+        web.scrollView.backgroundColor = appBackground
         web.scrollView.contentInsetAdjustmentBehavior = .never  // the page pads for the notch itself
         web.scrollView.bounces = false
         web.load(URLRequest(url: siteURL))
