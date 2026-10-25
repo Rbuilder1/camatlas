@@ -1,2 +1,6 @@
 __pycache__/
 site/
+ios/*.xcodeproj/
+ios/build/
+ios/Payload/
+ios/*.ipa

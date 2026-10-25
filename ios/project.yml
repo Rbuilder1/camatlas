@@ -1,0 +1,43 @@
+# XcodeGen spec for the CamAtlas iPhone app; .github/workflows/ios.yml turns it into an Xcode project
+# on GitHub's macOS runners (no Mac needed locally) and builds CamAtlas.ipa.
+name: CamAtlas
+options:
+  bundleIdPrefix: io.github.rbuilder1
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  CamAtlas:
+    type: application
+    platform: iOS
+    sources: [CamAtlas]
+    info:
+      path: CamAtlas/Info.plist
+      properties:
+        CFBundleDisplayName: CamAtlas
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: ""
+        UIStatusBarStyle: UIStatusBarStyleLightContent
+        UIViewControllerBasedStatusBarAppearance: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSLocationWhenInUseUsageDescription: Show where you are on the camera map
+        LSApplicationQueriesSchemes: [sms]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.rbuilder1.camatlas
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: NO

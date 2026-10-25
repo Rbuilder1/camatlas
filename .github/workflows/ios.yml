@@ -1,0 +1,49 @@
+# Builds the CamAtlas iPhone app on a GitHub macOS runner and publishes CamAtlas-unsigned.ipa on
+# the "ios-latest" release. It's unsigned: installing it needs an Apple ID signing tool such as
+# Sideloadly / AltStore, until a paid Apple Developer account lets this workflow sign it for TestFlight.
+name: Build iPhone app
+
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate
+      - name: Build (unsigned)
+        run: |
+          cd ios
+          xcodebuild -project CamAtlas.xcodeproj -scheme CamAtlas -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -archivePath build/CamAtlas.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive | tail -40
+          test -d build/CamAtlas.xcarchive/Products/Applications/CamAtlas.app
+      - name: Package CamAtlas-unsigned.ipa
+        run: |
+          cd ios && mkdir Payload
+          cp -R build/CamAtlas.xcarchive/Products/Applications/CamAtlas.app Payload/
+          zip -qry CamAtlas-unsigned.ipa Payload
+          ls -l CamAtlas-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CamAtlas-unsigned-ipa
+          path: ios/CamAtlas-unsigned.ipa
+      - name: Publish on the ios-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ios-latest >/dev/null 2>&1 || gh release create ios-latest --prerelease \
+            --title "CamAtlas for iPhone (unsigned test build)" \
+            --notes "Unsigned iPhone build of CamAtlas. Install with Sideloadly or AltStore using your Apple ID (free Apple IDs: re-sign every 7 days). Everyone else: use https://rbuilder1.github.io/camatlas/ in Safari and Add to Home Screen."
+          gh release upload ios-latest ios/CamAtlas-unsigned.ipa --clobber
