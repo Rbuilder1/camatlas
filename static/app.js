@@ -169,6 +169,131 @@ function setFlock(on) {
   else { map.removeLayer(flockLayer); updateStats(); }
 }
 
+// ------------------------------------------------------------------ gas stations
+// OpenStreetMap's fuel stations (amenity=fuel) from the public Overpass API, fetched for the area in
+// view once zoomed in to town level; there are far too many to load for a whole country. Straight from
+// the page, so it works the same in the app, on the hosted copy and on the PC. No prices: OSM has none.
+const GAS_MIN_ZOOM = 11;
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+const GAS_TILE = 0.25;             // degrees; stations are fetched and remembered per tile
+const GAS_KEEP = 7 * 864e5;        // remembered tiles are reused for a week
+const gasTileKey = (i, j) => `gas.${i}.${j}`;
+const GAS_ICON = L.divIcon({ html: '<div class="pin gas"><svg viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M7 8h5M15 10h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V9l-3-3"/></svg></div>',
+  className: '', iconSize: [22, 22], iconAnchor: [11, 11] });
+const gasLayer = L.layerGroup();
+const gasSeen = new Map();     // OSM id -> marker, so panning back never draws a station twice
+let gasOn = store.get('gas', false), gasBusy = false;
+const gasTilesDone = new Set();   // tiles drawn this session
+
+function gasPopup(t, lat, lon) {
+  const el = document.createElement('div');
+  const name = t.name || t.brand || 'Gas station';
+  const addr = [[t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' '), t['addr:city']].filter(Boolean).join(', ');
+  const fuels = Object.keys(t).filter((k) => k.startsWith('fuel:') && t[k] === 'yes')
+    .map((k) => k.slice(5).replace(/_/g, ' ').replace(/^octane /, '') ).join(', ');
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const dir = ios ? `https://maps.apple.com/?daddr=${lat},${lon}` : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+  el.innerHTML = '<b class="gname"></b><div class="muted gmeta"></div><div class="gfuel"></div>'
+    + `<a class="btn gdir" href="${dir}" target="_blank" rel="noopener">Directions</a>`
+    + '<div class="muted small">© OpenStreetMap contributors</div>';
+  el.querySelector('.gname').textContent = name + (t.brand && t.name && !t.name.includes(t.brand) ? ` (${t.brand})` : '');
+  el.querySelector('.gmeta').textContent = [addr, t.opening_hours === '24/7' ? 'Open 24 hours' : t.opening_hours].filter(Boolean).join(' · ');
+  el.querySelector('.gfuel').textContent = fuels ? 'Fuel: ' + fuels : '';
+  return el;
+}
+
+// Only the tags the popup uses are kept, so a week of browsing fits easily in the phone's storage.
+const GAS_TAGS = /^(name|brand|opening_hours|addr:(housenumber|street|city)|fuel:.*)$/;
+
+function drawGas(stations) {
+  for (const [key, lat, lon, t] of stations) {
+    if (gasSeen.has(key)) continue;
+    gasSeen.set(key, L.marker([lat, lon], { icon: GAS_ICON, title: t.name || t.brand || 'Gas station', zIndexOffset: -100 })
+      .bindPopup(() => gasPopup(t, lat, lon), { className: 'gas-popup', maxWidth: 280 })
+      .addTo(gasLayer));
+  }
+}
+
+// Public Overpass servers are often at capacity, so the same query goes to two at once and the first
+// good answer wins; the other request is cancelled.
+async function overpass(q) {
+  const ctrls = OVERPASS.map(() => new AbortController());
+  const timer = setTimeout(() => ctrls.forEach((c) => c.abort()), 60000);
+  try {
+    return await Promise.any(OVERPASS.map(async (url, i) => {
+      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), signal: ctrls[i].signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+      if (!r.ok) throw new Error(url + ' ' + r.status);
+      const data = await r.json();
+      ctrls.forEach((c, k) => k !== i && c.abort());
+      return data;
+    }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function loadGas() {
+  if (!gasOn || gasBusy) return;
+  if (map.getZoom() < GAS_MIN_ZOOM) { updateStats(); return; }
+  const b = map.getBounds().pad(0.2);
+  const tiles = [];
+  for (let i = Math.floor(b.getSouth() / GAS_TILE); i <= Math.floor(b.getNorth() / GAS_TILE); i++)
+    for (let j = Math.floor(b.getWest() / GAS_TILE); j <= Math.floor(b.getEast() / GAS_TILE); j++) tiles.push([i, j]);
+  const missing = [];
+  for (const [i, j] of tiles) {  // tiles remembered from earlier (this week) draw straight away
+    const k = gasTileKey(i, j);
+    if (gasTilesDone.has(k)) continue;
+    const saved = store.get(k, null);
+    if (saved && Date.now() - saved.t < GAS_KEEP) { drawGas(saved.s); gasTilesDone.add(k); }
+    else missing.push([i, j]);
+  }
+  updateStats();
+  if (!missing.length) return;
+  const s = Math.min(...missing.map((m) => m[0])) * GAS_TILE, n = (Math.max(...missing.map((m) => m[0])) + 1) * GAS_TILE;
+  const w = Math.min(...missing.map((m) => m[1])) * GAS_TILE, e = (Math.max(...missing.map((m) => m[1])) + 1) * GAS_TILE;
+  const box = [s, w, n, e].map((v) => v.toFixed(4)).join(',');
+  const q = `[out:json][timeout:50];(node["amenity"="fuel"](${box});way["amenity"="fuel"](${box}););out center tags 3000;`;
+  gasBusy = true;
+  const slow = setTimeout(() => toast('Loading gas stations…'), 1500);
+  try {
+    const data = await overpass(q);
+    const byTile = new Map(missing.map(([i, j]) => [gasTileKey(i, j), []]));
+    for (const el of data.elements || []) {
+      const lat = el.lat ?? (el.center && el.center.lat), lon = el.lon ?? (el.center && el.center.lon);
+      if (lat == null) continue;
+      const tags = Object.fromEntries(Object.entries(el.tags || {}).filter(([k]) => GAS_TAGS.test(k)));
+      const list = byTile.get(gasTileKey(Math.floor(lat / GAS_TILE), Math.floor(lon / GAS_TILE)));
+      if (list) list.push([el.type + el.id, +lat.toFixed(6), +lon.toFixed(6), tags]);
+    }
+    for (const [k, list] of byTile) { store.set(k, { t: Date.now(), s: list }); drawGas(list); gasTilesDone.add(k); }
+    loadGasSoon();  // picks up any area the map moved to while this was loading
+  } catch {
+    toast('Gas station servers are busy right now; try again in a minute');
+  }
+  clearTimeout(slow);
+  gasBusy = false;
+  updateStats();
+}
+const loadGasSoon = (() => { let t; return () => { clearTimeout(t); t = setTimeout(loadGas, 600); }; })();
+map.on('moveend', () => { if (gasOn) loadGasSoon(); });
+
+function setGas(on) {
+  gasOn = on;
+  store.set('gas', on);
+  $('gasBtn').classList.toggle('on', on);
+  if (on) {
+    map.addLayer(gasLayer);
+    if (map.getZoom() < GAS_MIN_ZOOM) toast('Zoom in to a town to see gas stations');
+    loadGas();
+  } else {
+    map.removeLayer(gasLayer);
+    updateStats();
+  }
+}
+$('gasBtn').onclick = () => setGas(!gasOn);
+if (gasOn) setGas(true);
+
 $('zin').onclick = () => map.zoomIn();
 $('zout').onclick = () => map.zoomOut();
 
@@ -321,6 +446,7 @@ function updateStats(loading = S.sources.filter((s) => s.loading).map((s) => s.i
   $('stats').textContent = [
     `${shown.toLocaleString()} cameras · ${live.toLocaleString()} with video · ${srcs} sources`,
     flockTotal && `${flockTotal.toLocaleString()} Flock ALPRs (${flockView.toLocaleString()} in view)`,
+    gasOn && (map.getZoom() < GAS_MIN_ZOOM ? 'zoom in for gas stations' : `${gasSeen.size.toLocaleString()} gas stations`),
     loading.length && `updating ${loading.join(', ')}…`,
   ].filter(Boolean).join(' · ');
 }
