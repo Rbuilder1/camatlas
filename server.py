@@ -627,7 +627,10 @@ SOURCES = [
     ("colorado", "CDOT (Colorado)", carsprogram("co", "Colorado", "CO"), "Colorado DOT, COtrip.org"),
     ("austin", "City of Austin, TX", src_austin, "City of Austin, TX, data.austintexas.gov"),
     ("florida", "FL511 (Florida)", cars511("fl511.com"), "Florida DOT, fl511.com"),
-    ("georgia", "511 Georgia", cars511("511ga.org"), "Georgia DOT, 511ga.org"),
+    # 511 Georgia (cars511("511ga.org")) is off: since 2026-10 every /map/Cctv/<id> still is the same
+    # "No live camera feed at this time" picture, even in a browser, and the streams answer 401 without a
+    # GDOT login. All 4,331 cameras only ever showed as offline. To check if it's back: fetch two
+    # /map/Cctv/<id> images and see whether they still match byte for byte.
     ("southcarolina", "SCDOT (South Carolina)", src_southcarolina, "South Carolina DOT, 511sc.org"),
     ("newengland", "511 New England (ME/NH/VT)", cars511("www.newengland511.org"),
      "New England 511 — Maine DOT, NHDOT, VTrans, newengland511.org"),
