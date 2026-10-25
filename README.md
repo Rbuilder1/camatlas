@@ -2,22 +2,33 @@
 
 A map of live public traffic, weather, river and wildfire cameras: about 50,000 cameras from
 transportation departments and other public agencies, with live video where they offer it,
-favorites, a Monitor wall of many cameras at once, and an in-app search that finds more
-public camera feeds to add.
+favorites, and a Monitor wall of many cameras at once.
 
-## Install on Android
+## iPhone (and any browser)
+
+Open **https://rbuilder1.github.io/camatlas/** in Safari, tap **Share**, then **Add to Home Screen**.
+It then opens full-screen from its own icon like any other app. Camera lists refresh every 6 hours.
+
+## Android
 
 1. On your phone, download **[CamAtlas.apk](https://github.com/Rbuilder1/camatlas/releases/latest/download/CamAtlas.apk)**.
 2. Open the downloaded file. If Android asks, allow your browser (or Files app) to install apps.
 3. Tap **Install**, then open CamAtlas.
 
-Android 7 or newer. Updates are posted under [Releases](https://github.com/Rbuilder1/camatlas/releases);
-install a newer APK over the old one to update.
+Android 7 or newer. The Android app also has **Find more cameras**, which searches public
+open-data catalogs for camera feeds to add. Updates are posted under
+[Releases](https://github.com/Rbuilder1/camatlas/releases); install a newer APK over the old one.
 
 ## Sharing it
 
-In the app, open the **⋮** menu (or **Sources**) and choose **Text a download link** to send this
-link by text message, or **Send the app file** to send the APK itself over Quick Share, WhatsApp,
-email and so on.
+On iPhone, open **Sources** and tap **Share CamAtlas**. On Android, use the **⋮** menu:
+**Text a download link** or **Send the app file**.
+
+## How the web version is built
+
+`web/build_static.py` runs the same camera-gathering code as the app (`server.py`) and writes the
+lists as files next to the page in `static/`. The workflow in `.github/workflows/pages.yml` runs it
+on a schedule and publishes the result to GitHub Pages. `health_seed.json` lists cameras known to
+be broken, so they stay hidden.
 
 Each camera's image belongs to the agency credited for it in the app's Sources panel.
