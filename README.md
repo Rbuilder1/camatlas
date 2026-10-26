@@ -1,4 +1,6 @@
-# CamAtlas
+# CamWorld
+
+*(formerly CamAtlas; the links below are unchanged)*
 
 A map of live public traffic, weather, river and wildfire cameras: about 50,000 cameras from
 transportation departments and other public agencies, with live video where they offer it,

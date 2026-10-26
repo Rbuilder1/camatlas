@@ -13,7 +13,7 @@ targets:
     info:
       path: CamAtlas/Info.plist
       properties:
-        CFBundleDisplayName: CamAtlas
+        CFBundleDisplayName: CamWorld
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:

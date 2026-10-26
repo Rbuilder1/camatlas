@@ -599,7 +599,7 @@ $('discoverBtn').onclick = async () => {
 api('/api/app').then((a) => {
   $('shareRow').hidden = !a.share;
   if (a.version) {  // the Android app: which version, and which page/code build it's running
-    $('appVersion').textContent = `CamAtlas ${a.version} · build ${a.content || 'built-in'}`
+    $('appVersion').textContent = `CamWorld ${a.version} · build ${a.content || 'built-in'}`
       + (a.updated ? ' (updated over the air)' : '') + ' · updates automatically';
     $('appVersion').hidden = false;
   }
@@ -612,7 +612,7 @@ const shareApp = (how) => async () => {
 
 // The hosted copy shares its own address: as a new text message, or through the phone's share sheet.
 // Searching and re-downloading need the app's own server, so those controls go.
-const SITE_TEXT = 'Check out CamAtlas, a map of live public traffic and weather cameras.\n'
+const SITE_TEXT = 'Check out CamWorld, a map of live public traffic and weather cameras.\n'
   + 'iPhone: https://rbuilder1.github.io/camatlas/ (open in Safari, tap Share, then Add to Home Screen)\n'
   + 'Android: https://github.com/Rbuilder1/camatlas/releases/latest/download/CamAtlas.apk';
 function textSite() {
@@ -622,7 +622,7 @@ function textSite() {
 }
 async function shareSite() {
   try {
-    if (navigator.share) await navigator.share({ title: 'CamAtlas', text: SITE_TEXT });
+    if (navigator.share) await navigator.share({ title: 'CamWorld', text: SITE_TEXT });
     else { await navigator.clipboard.writeText(SITE_TEXT); toast('Link copied'); }
   } catch (e) { if (e.name !== 'AbortError') toast('Couldn\'t open sharing'); }
 }
@@ -1018,7 +1018,7 @@ document.addEventListener('keydown', (e) => {
 
 // ------------------------------------------------------------------ boot
 Promise.all([loadState(), loadCameras()]).then(renderFavs).catch((e) => {
-  $('stats').textContent = 'Could not reach the CamAtlas server: ' + e.message;
+  $('stats').textContent = 'Could not reach the CamWorld server: ' + e.message;
 });
 // Restored only here, once the whole script has run: setGas shows a toast, and calling it up where the
 // gas layer is defined (before toast's own variables exist) threw and stopped the page from loading.
