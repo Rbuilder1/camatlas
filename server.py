@@ -1094,6 +1094,8 @@ for _d in discovery["found"]:
 # Set by the Android app: share_app("text") opens a new text message with the download links,
 # share_app("link") offers the same message to any app, share_app("file") sends the APK itself.
 share_app = None
+# Set by the Android app: {"version": app version, "content": short hash of the server.py + page it runs}.
+app_info = {}
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -1173,7 +1175,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if url.path == "/api/discover":
             return self.send_json(discovery_state())
         if url.path == "/api/app":
-            return self.send_json({"share": share_app is not None})
+            return self.send_json({"share": share_app is not None, **app_info})
         if url.path == "/api/status":
             with lock:
                 return self.send_json({"loading": sorted(refreshing)})

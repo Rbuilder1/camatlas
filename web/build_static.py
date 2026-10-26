@@ -59,6 +59,38 @@ def upgrade(url, secure):
     return "https://" + url[7:] if host in secure else ""
 
 
+def content_hash(root):
+    """Hash of everything an over-the-air update replaces: server.py and static/. The Android build
+    stamps the same hash into the APK (content_version.txt), so the app can tell its own code apart
+    from a newer published one. Returns (hex digest, sorted file paths)."""
+    import hashlib
+    files = [os.path.join(root, "server.py")]
+    for d, _, names in os.walk(os.path.join(root, "static")):
+        files += [os.path.join(d, n) for n in names]
+    files.sort(key=lambda f: os.path.relpath(f, root).replace(os.sep, "/"))
+    h = hashlib.sha256()
+    for f in files:
+        rel = os.path.relpath(f, root).replace(os.sep, "/")
+        with open(f, "rb") as fh:
+            h.update(rel.encode() + b"\0" + fh.read().replace(b"\r\n", b"\n"))  # same on Windows and Linux
+    return h.hexdigest(), files
+
+
+def write_update(server, out):
+    """The Android app's over-the-air update: server.py and the page (static/) as one zip, plus a
+    manifest naming its hash. The app checks the manifest at startup and, when the hash is new,
+    unpacks the zip into its own storage and runs from it on the next launch (see app.py)."""
+    import zipfile
+    digest, files = content_hash(ROOT)
+    os.makedirs(out, exist_ok=True)
+    with zipfile.ZipFile(os.path.join(out, "content.zip"), "w", zipfile.ZIP_DEFLATED) as z:
+        for f in files:
+            z.write(f, os.path.relpath(f, ROOT).replace(os.sep, "/"))
+    with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as f:
+        json.dump({"content": digest, "built": int(__import__("time").time())}, f)
+    print("Update bundle", digest[:12], f"({len(files)} files)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(HERE, "site"))
@@ -120,6 +152,7 @@ def main():
     with open(index, "w", encoding="utf-8") as f:
         f.write(page)
     open(os.path.join(args.out, ".nojekyll"), "w").close()  # serve vendor/ and dotfiles as-is
+    write_update(server, os.path.join(args.out, "update"))
     total = sum(len(c) for c in cameras.values())
     print(f"Built {args.out}: {total:,} cameras from {sum(1 for c in cameras.values() if c)} sources, "
           f"{len(server.flock['pts']):,} Flock points")

@@ -597,7 +597,13 @@ $('discoverBtn').onclick = async () => {
 };
 
 // ------------------------------------------------------------------ share the app (Android)
-api('/api/app').then((a) => { $('shareRow').hidden = !a.share; }).catch(() => {});
+api('/api/app').then((a) => {
+  $('shareRow').hidden = !a.share;
+  if (a.version) {  // the Android app: which version, and which page/code build it's running
+    $('appVersion').textContent = `CamAtlas ${a.version} · build ${a.content || 'built-in'}${a.updated ? ' (updated over the air)' : ''}`;
+    $('appVersion').hidden = false;
+  }
+}).catch(() => {});
 const shareApp = (how) => async () => {
   if (STATIC) return how === 'text' ? textSite() : shareSite();
   try { await api('/api/share-app', { method: 'POST', body: JSON.stringify({ how }) }); }
