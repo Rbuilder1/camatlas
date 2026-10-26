@@ -27,6 +27,7 @@ jobs:
           cd ios
           xcodebuild -project CamAtlas.xcodeproj -scheme CamAtlas -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -archivePath build/CamAtlas.xcarchive \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive | tail -40
           test -d build/CamAtlas.xcarchive/Products/Applications/CamAtlas.app
       - name: Package CamAtlas-unsigned.ipa
@@ -35,6 +36,53 @@ jobs:
           cp -R build/CamAtlas.xcarchive/Products/Applications/CamAtlas.app Payload/
           zip -qry CamAtlas-unsigned.ipa Payload
           ls -l CamAtlas-unsigned.ipa
+      # SideStore / AltStore "source": people add this one link in SideStore or AltStore and get
+      # CamWorld with an Install button there, plus updates whenever this workflow rebuilds it.
+      - name: Write the SideStore/AltStore source
+        env:
+          BUILD: ${{ github.run_number }}
+        run: |
+          python3 - <<'EOF'
+          import datetime, json, os, re
+          spec = open("ios/project.yml").read()
+          version = re.search(r'MARKETING_VERSION: "([^"]+)"', spec).group(1)
+          ipa = "ios/CamAtlas-unsigned.ipa"
+          release = "https://github.com/Rbuilder1/camatlas/releases/download/ios-latest/"
+          source = {
+            "name": "CamWorld",
+            "identifier": "io.github.rbuilder1.camworld.source",
+            "subtitle": "Live public camera map",
+            "website": "https://rbuilder1.github.io/camatlas/",
+            "iconURL": "https://rbuilder1.github.io/camatlas/icon-512.png",
+            "tintColor": "#56b6f2",
+            "apps": [{
+              "name": "CamWorld",
+              "bundleIdentifier": "io.github.rbuilder1.camatlas",
+              "developerName": "Rbuilder1",
+              "subtitle": "Live traffic, weather and wildfire cameras",
+              "localizedDescription": "About 50,000 public cameras from transportation departments and other "
+                "agencies on one map, with live video where they offer it, favorites, a Monitor wall of many "
+                "cameras at once, and gas stations.",
+              "iconURL": "https://rbuilder1.github.io/camatlas/icon-512.png",
+              "tintColor": "#56b6f2",
+              "category": "navigation",
+              "appPermissions": {"entitlements": [], "privacy": {
+                "NSLocationWhenInUseUsageDescription": "Show where you are on the camera map"}},
+              "versions": [{
+                "version": version,
+                "buildVersion": os.environ["BUILD"],
+                "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "localizedDescription": "Latest CamWorld build.",
+                "downloadURL": release + "CamAtlas-unsigned.ipa",
+                "size": os.path.getsize(ipa),
+                "minOSVersion": "15.0",
+              }],
+            }],
+            "news": [],
+          }
+          json.dump(source, open("ios/altstore-source.json", "w"), indent=2)
+          print(json.dumps(source["apps"][0]["versions"][0]))
+          EOF
       - uses: actions/upload-artifact@v4
         with:
           name: CamAtlas-unsigned-ipa
@@ -46,4 +94,4 @@ jobs:
           gh release view ios-latest >/dev/null 2>&1 || gh release create ios-latest --prerelease \
             --title "CamAtlas for iPhone (unsigned test build)" \
             --notes "Unsigned iPhone build of CamAtlas. Install with Sideloadly or AltStore using your Apple ID (free Apple IDs: re-sign every 7 days). Everyone else: use https://rbuilder1.github.io/camatlas/ in Safari and Add to Home Screen."
-          gh release upload ios-latest ios/CamAtlas-unsigned.ipa --clobber
+          gh release upload ios-latest ios/CamAtlas-unsigned.ipa ios/altstore-source.json --clobber
