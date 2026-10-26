@@ -600,7 +600,8 @@ $('discoverBtn').onclick = async () => {
 api('/api/app').then((a) => {
   $('shareRow').hidden = !a.share;
   if (a.version) {  // the Android app: which version, and which page/code build it's running
-    $('appVersion').textContent = `CamAtlas ${a.version} · build ${a.content || 'built-in'}${a.updated ? ' (updated over the air)' : ''}`;
+    $('appVersion').textContent = `CamAtlas ${a.version} · build ${a.content || 'built-in'}`
+      + (a.updated ? ' (updated over the air)' : '') + ' · updates automatically';
     $('appVersion').hidden = false;
   }
 }).catch(() => {});
