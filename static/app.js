@@ -292,7 +292,6 @@ function setGas(on) {
   }
 }
 $('gasBtn').onclick = () => setGas(!gasOn);
-if (gasOn) setGas(true);
 
 $('zin').onclick = () => map.zoomIn();
 $('zout').onclick = () => map.zoomOut();
@@ -1021,3 +1020,6 @@ document.addEventListener('keydown', (e) => {
 Promise.all([loadState(), loadCameras()]).then(renderFavs).catch((e) => {
   $('stats').textContent = 'Could not reach the CamAtlas server: ' + e.message;
 });
+// Restored only here, once the whole script has run: setGas shows a toast, and calling it up where the
+// gas layer is defined (before toast's own variables exist) threw and stopped the page from loading.
+if (gasOn) setGas(true);
