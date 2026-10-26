@@ -1,6 +1,6 @@
-# CamWorld
+# CamPit
 
-*(formerly CamAtlas; the links below are unchanged)*
+*(formerly CamAtlas and CamWorld; the links below are unchanged)*
 
 A map of live public traffic, weather, river and wildfire cameras: about 50,000 cameras from
 transportation departments and other public agencies, with live video where they offer it,
@@ -13,14 +13,14 @@ It then opens full-screen from its own icon like any other app. Camera lists ref
 
 ### iPhone app (SideStore / AltStore)
 
-Prefer a real app over the home-screen web app? CamWorld is also a native iPhone app, shared through
+Prefer a real app over the home-screen web app? CamPit is also a native iPhone app, shared through
 a **SideStore/AltStore source** (Apple only allows App Store installs otherwise):
 
 1. Set up **SideStore** (sidestore.io) or **AltStore** (altstore.io) on your iPhone once, following
    their guide (needs a computer for the first setup).
 2. In SideStore/AltStore, go to **Sources → +** and add:
    `https://github.com/Rbuilder1/camatlas/releases/download/ios-latest/altstore-source.json`
-3. Open **CamWorld** in that source and tap **Install**. New builds show up there as updates.
+3. Open **CamPit** in that source and tap **Install**. New builds show up there as updates.
 4. First time only: Settings → Privacy & Security → turn on **Developer Mode**.
 
 With a free Apple ID, SideStore/AltStore re-sign the app every 7 days for you. Everyone else: the web

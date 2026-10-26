@@ -1,6 +1,6 @@
 {
-  "name": "CamWorld — public camera map",
-  "short_name": "CamWorld",
+  "name": "CamPit — public camera map",
+  "short_name": "CamPit",
   "description": "A map of thousands of open public traffic and road cameras worldwide, with search and a multi-camera wall.",
   "start_url": "./",
   "scope": "./",

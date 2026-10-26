@@ -37,7 +37,7 @@ jobs:
           zip -qry CamAtlas-unsigned.ipa Payload
           ls -l CamAtlas-unsigned.ipa
       # SideStore / AltStore "source": people add this one link in SideStore or AltStore and get
-      # CamWorld with an Install button there, plus updates whenever this workflow rebuilds it.
+      # CamPit with an Install button there, plus updates whenever this workflow rebuilds it.
       - name: Write the SideStore/AltStore source
         env:
           BUILD: ${{ github.run_number }}
@@ -49,14 +49,14 @@ jobs:
           ipa = "ios/CamAtlas-unsigned.ipa"
           release = "https://github.com/Rbuilder1/camatlas/releases/download/ios-latest/"
           source = {
-            "name": "CamWorld",
+            "name": "CamPit",
             "identifier": "io.github.rbuilder1.camworld.source",
             "subtitle": "Live public camera map",
             "website": "https://rbuilder1.github.io/camatlas/",
             "iconURL": "https://rbuilder1.github.io/camatlas/icon-512.png",
             "tintColor": "#56b6f2",
             "apps": [{
-              "name": "CamWorld",
+              "name": "CamPit",
               "bundleIdentifier": "io.github.rbuilder1.camatlas",
               "developerName": "Rbuilder1",
               "subtitle": "Live traffic, weather and wildfire cameras",
@@ -72,7 +72,7 @@ jobs:
                 "version": version,
                 "buildVersion": os.environ["BUILD"],
                 "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "localizedDescription": "Latest CamWorld build.",
+                "localizedDescription": "Latest CamPit build.",
                 "downloadURL": release + "CamAtlas-unsigned.ipa",
                 "size": os.path.getsize(ipa),
                 "minOSVersion": "15.0",
