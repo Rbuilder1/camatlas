@@ -262,3 +262,6 @@ input[type=password], input[type=text] { height: 34px; padding: 0 10px; backgrou
 .pin.spring { width: 22px; height: 22px; border-radius: 50%; background: #2dd4bf; border: 2px solid #0b0c0f; display: grid; place-items: center; color: #0b0c0f; }
 .pin.spring svg { width: 12px; height: 12px; stroke-width: 2.4; fill: currentColor; }
 #springBtn.on { border-color: #2dd4bf; color: #2dd4bf; }
+.pin.power { width: 22px; height: 22px; border-radius: 50%; background: #facc15; border: 2px solid #0b0c0f; display: grid; place-items: center; color: #0b0c0f; }
+.pin.power svg { width: 12px; height: 12px; stroke-width: 2.2; fill: currentColor; }
+#powerBtn.on { border-color: #facc15; color: #facc15; }

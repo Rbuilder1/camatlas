@@ -320,12 +320,13 @@ function placesLayer({ key, label, btn, pin, svg, select, keep, title, popup }) 
 }
 
 // Fills a popup: a bold name, grey detail lines, Directions, and the OSM credit (all text set safely).
-function placePopup(name, lines, lat, lon) {
+function placePopup(name, lines, lat, lon, credit = '© OpenStreetMap contributors') {
   const el = document.createElement('div');
   el.innerHTML = '<b class="pname"></b><div class="plines muted"></div>'
     + `<a class="btn pdir" href="${directionsUrl(lat, lon)}" target="_blank" rel="noopener">Directions</a>`
-    + '<div class="muted small">© OpenStreetMap contributors</div>';
+    + '<div class="muted small pcredit"></div>';
   el.querySelector('.pname').textContent = name;
+  el.querySelector('.pcredit').textContent = credit;
   for (const line of lines.filter(Boolean)) {
     const d = document.createElement('div');
     d.textContent = line;
@@ -366,7 +367,25 @@ const springs = placesLayer({
     t.description,
   ], lat, lon),
 });
-const PLACE_LAYERS = [gas, springs];
+// Power plants: OSM's power=plant, plus (in the US) every plant of 1 MW or more from the Energy
+// Information Administration, which also fills in the fuel and capacity where OSM has the plant.
+const power = placesLayer({
+  key: 'power', label: 'power plants', btn: 'powerBtn', pin: 'power',
+  svg: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  select: (box) => `nwr["power"="plant"](${box});`,
+  keep: /^(name|operator|plant:source|plant:output:electricity|description)$/,
+  title: (t) => t.name || 'Power plant',
+  popup: (t, lat, lon) => {
+    const src = (t['plant:source'] || '').replace(/;/g, ', ').replace(/_/g, ' ');
+    return placePopup(t.name || 'Power plant', [
+      [src && src[0].toUpperCase() + src.slice(1), t['plant:output:electricity'] !== 'yes' && t['plant:output:electricity']]
+        .filter(Boolean).join(' · '),
+      t.operator && 'Run by ' + t.operator,
+      t.description,
+    ], lat, lon, '© OpenStreetMap contributors · U.S. Energy Information Administration');
+  },
+});
+const PLACE_LAYERS = [gas, springs, power];
 
 $('zin').onclick = () => map.zoomIn();
 $('zout').onclick = () => map.zoomOut();

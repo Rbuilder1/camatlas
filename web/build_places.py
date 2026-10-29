@@ -31,8 +31,10 @@ LAYERS = {
             re.compile(r"^(name|brand|opening_hours|addr:(housenumber|street|city)|fuel:.*)$")),
     "springs": (lambda t: t.get("natural") == "spring",
                 re.compile(r"^(name|drinking_water|seasonal|intermittent|description|access|ele)$")),
+    "power": (lambda t: t.get("power") == "plant",
+              re.compile(r"^(name|operator|plant:source|plant:output:electricity|description)$")),
 }
-OSMIUM_FILTER = ["n/natural=spring", "nwr/amenity=fuel"]
+OSMIUM_FILTER = ["n/natural=spring", "nwr/amenity=fuel", "nwr/power=plant"]
 OSM_TYPE = {"n": "node", "w": "way", "r": "relation"}
 
 
@@ -143,24 +145,71 @@ def usgs_springs():
     return [(oid, lat, lon, tags) for oid, (lat, lon, tags) in found.items()]
 
 
+def eia_plants():
+    """Every US power plant of 1 MW or more, from the Energy Information Administration's public
+    list (EIA-860M, on its US Energy Atlas), tagged the way OpenStreetMap tags plants."""
+    import urllib.parse
+    import urllib.request
+
+    out, offset = [], 0
+    while True:
+        q = urllib.parse.urlencode({"where": "1=1", "outSR": 4326, "orderByFields": "OBJECTID", "f": "json",
+                                    "outFields": "Plant_Code,Plant_Name,Utility_Na,PrimSource,source_des,Total_MW",
+                                    "resultOffset": offset, "resultRecordCount": 2000})
+        req = urllib.request.Request("https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/"
+                                     f"Power_Plants_in_the_US/FeatureServer/0/query?{q}",
+                                     headers={"User-Agent": "CamAtlas/1.0 (public camera map)"})
+        for attempt in range(4):
+            try:
+                d = json.loads(urllib.request.urlopen(req, timeout=120).read())
+                if "error" in d:
+                    raise RuntimeError(d["error"])
+                break
+            except Exception:
+                if attempt == 3:
+                    raise
+                time.sleep(10 * (attempt + 1))
+        feats = d.get("features") or []
+        for f in feats:
+            a, g = f["attributes"], f.get("geometry")
+            if not g:
+                continue
+            tags = {"name": a.get("Plant_Name") or "Power plant", "operator": a.get("Utility_Na") or "",
+                    "plant:source": a.get("PrimSource") or "", "description": a.get("source_des") or ""}
+            if a.get("Total_MW"):
+                tags["plant:output:electricity"] = f"{a['Total_MW']:g} MW"
+            out.append((f"eia{a['Plant_Code']}", g["y"], g["x"], {k: v for k, v in tags.items() if v}))
+        offset += len(feats)
+        if not feats or not d.get("exceededTransferLimit"):
+            return out
+
+
 def near(a, b, metres):
     dy = math.radians(b[0] - a[0]) * 6371000
     dx = math.radians(b[1] - a[1]) * 6371000 * math.cos(math.radians(a[0]))
     return math.hypot(dx, dy) < metres
 
 
-def add_usgs(springs, extra):
-    """Add USGS springs that OpenStreetMap doesn't already have (within 300 m, or the same name within 3 km).
-    `springs` is the springs layer's {tile key: {id: [id, lat, lon, tags]}}. Returns how many were added."""
+def add_extra(layer, extra, close=300, same_name=3000, merge=False, osm_only=False):
+    """Add places from another list that OpenStreetMap doesn't already have (one within `close` metres,
+    or of the same name within `same_name`). With `merge`, a match keeps OSM's place and gains the tags
+    OSM lacks. With `osm_only`, places from the list are only checked against OSM's, not against each
+    other (two power plants can share a site; two springs 300 m apart in two USGS lists are one).
+    `layer` is {tile key: {id: [id, lat, lon, tags]}}. Returns how many were added."""
     added = 0
+    base = {k: list(v.values()) for k, v in layer.items()} if osm_only else None
     for oid, lat, lon, tags in extra:
         i, j = math.floor(lat / TILE), math.floor(lon / TILE)
-        nearby = [s for di in (-1, 0, 1) for dj in (-1, 0, 1) for s in springs.get(f"{i + di}.{j + dj}", {}).values()]
+        nearby = [s for di in (-1, 0, 1) for dj in (-1, 0, 1)
+                  for s in (base.get(f"{i + di}.{j + dj}", []) if base is not None else layer.get(f"{i + di}.{j + dj}", {}).values())]
         name = (tags.get("name") or "").lower()
-        if any(near((lat, lon), (s[1], s[2]), 300) or (name and (s[3].get("name") or "").lower() == name and near((lat, lon), (s[1], s[2]), 3000))
-               for s in nearby):
+        match = next((s for s in nearby if near((lat, lon), (s[1], s[2]), close)
+                      or (name and (s[3].get("name") or "").lower() == name and near((lat, lon), (s[1], s[2]), same_name))), None)
+        if match:
+            if merge:
+                match[3] = {**tags, **match[3]}
             continue
-        springs.setdefault(f"{i}.{j}", {})[oid] = [oid, round(lat, 6), round(lon, 6), tags]
+        layer.setdefault(f"{i}.{j}", {})[oid] = [oid, round(lat, 6), round(lon, 6), tags]
         added += 1
     return added
 
@@ -193,9 +242,13 @@ def main():
                         tiles[name].setdefault(key, {})[oid] = [oid, round(lat, 6), round(lon, 6), kept]
 
     try:
-        print("USGS springs added:", add_usgs(tiles["springs"], usgs_springs()))
+        print("USGS springs added:", add_extra(tiles["springs"], usgs_springs()))
     except Exception as e:  # a USGS outage shouldn't stop the weekly build; OSM springs still go out
         print("USGS springs skipped:", e)
+    try:  # plants are big sites: OSM marks the middle, EIA often the gate, so match more loosely
+        print("EIA power plants added:", add_extra(tiles["power"], eia_plants(), close=1500, same_name=8000, merge=True, osm_only=True))
+    except Exception as e:
+        print("EIA power plants skipped:", e)
 
     # Covered = a corner or the middle inside one of the downloaded states. A half-tile grid holds both:
     # tile (i, j) has its corners at (2i, 2j)..(2i+2, 2j+2) and its middle at (2i+1, 2j+1).
