@@ -75,6 +75,22 @@ const cluster = L.markerClusterGroup({
 });
 map.addLayer(cluster);
 
+// The camera button in the map controls hides or shows all camera pins, Flock ALPRs included (say, to
+// see just springs). It doesn't change which sources are on; those stay as set in Sources.
+let camsOn = store.get('camsOn', true);
+if (!camsOn) map.removeLayer(cluster);
+$('camBtn').classList.toggle('on', camsOn);
+$('camBtn').onclick = () => {
+  camsOn = !camsOn;
+  store.set('camsOn', camsOn);
+  $('camBtn').classList.toggle('on', camsOn);
+  camsOn ? map.addLayer(cluster) : map.removeLayer(cluster);
+  if (!camsOn) map.removeLayer(flockLayer);
+  else if (flockShown()) setFlock(true);
+  updateStats();
+  toast(camsOn ? 'Cameras shown' : 'Cameras hidden — tap the camera button to bring them back');
+};
+
 const pinIcons = {};
 function pinIcon(cam) {
   const k = cam.alpr ? 'alpr' : (cam.video ? 'live' : '') + (isFav(cam) ? ' fav' : '');
@@ -156,7 +172,7 @@ async function loadFlock() {
     }
     flockPts = data.pts || [];
     flockLoaded = true;
-    map.addLayer(flockLayer);
+    if (camsOn) map.addLayer(flockLayer);
     renderFlock();
   } catch (e) {
     toast('Could not load Flock locations');
@@ -165,7 +181,7 @@ async function loadFlock() {
 }
 
 function setFlock(on) {
-  if (on) { map.addLayer(flockLayer); flockLoaded ? renderFlock() : loadFlock(); }
+  if (on) { if (camsOn) map.addLayer(flockLayer); flockLoaded ? renderFlock() : loadFlock(); }
   else { map.removeLayer(flockLayer); updateStats(); }
 }
 
@@ -496,10 +512,10 @@ function updateStats(loading = S.sources.filter((s) => s.loading).map((s) => s.i
   const shown = S.cams.filter(visible).length;
   const live = S.cams.filter((c) => visible(c) && c.video).length;
   const srcs = S.sources.filter((s) => s.count && !s.lazy && !S.off.has(s.id)).length;
-  const flockTotal = flockLoaded && flockShown() ? flockPts.length : 0;
+  const flockTotal = camsOn && flockLoaded && flockShown() ? flockPts.length : 0;
   const flockView = flockLayer._inView || 0;
   $('stats').textContent = [
-    `${shown.toLocaleString()} cameras · ${live.toLocaleString()} with video · ${srcs} sources`,
+    camsOn ? `${shown.toLocaleString()} cameras · ${live.toLocaleString()} with video · ${srcs} sources` : 'cameras hidden',
     flockTotal && `${flockTotal.toLocaleString()} Flock ALPRs (${flockView.toLocaleString()} in view)`,
     ...PLACE_LAYERS.map((p) => p.on && (map.getZoom() < PLACE_MIN_ZOOM ? `zoom in for ${p.label}` : `${p.seen.size.toLocaleString()} ${p.label}`)),
     loading.length && `updating ${loading.join(', ')}…`,
