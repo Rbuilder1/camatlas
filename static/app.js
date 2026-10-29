@@ -75,7 +75,7 @@ const cluster = L.markerClusterGroup({
 });
 map.addLayer(cluster);
 
-// The camera button in the map controls hides or shows all camera pins, Flock ALPRs included (say, to
+// The Cameras chip (beside Sources) hides or shows all camera pins, Flock ALPRs included (say, to
 // see just springs). It doesn't change which sources are on; those stay as set in Sources.
 let camsOn = store.get('camsOn', true);
 if (!camsOn) map.removeLayer(cluster);
@@ -88,7 +88,7 @@ $('camBtn').onclick = () => {
   if (!camsOn) map.removeLayer(flockLayer);
   else if (flockShown()) setFlock(true);
   updateStats();
-  toast(camsOn ? 'Cameras shown' : 'Cameras hidden — tap the camera button to bring them back');
+  toast(camsOn ? 'Cameras shown' : 'Cameras hidden — tap Cameras to bring them back');
 };
 
 const pinIcons = {};

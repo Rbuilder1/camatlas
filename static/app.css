@@ -62,7 +62,9 @@ kbd { font: 11px ui-monospace, Consolas, monospace; border: 1px solid var(--line
 .chip.strong { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
 .chip.strong.on { background: var(--red); border-color: var(--red); color: #fff; }
 .chip.icon span:empty { display: none; }
-.chip.floating { position: fixed; top: calc(64px + var(--st)); left: calc(12px + var(--sl)); z-index: 900; }
+.floatbar { position: fixed; top: calc(64px + var(--st)); left: calc(12px + var(--sl)); z-index: 900; display: flex; gap: 8px; }
+#camBtn.on { border-color: #3ecf8e; color: #3ecf8e; }
+#camBtn:not(.on) { color: var(--muted); }
 /* Flock on/off switch */
 .switch { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px 0 10px; border-radius: 8px;
   background: var(--panel); border: 1px solid var(--line); cursor: pointer; white-space: nowrap; }
