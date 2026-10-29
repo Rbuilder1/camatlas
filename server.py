@@ -13,6 +13,7 @@ import gzip
 import hashlib
 import http.server
 import json
+import math
 import os
 import re
 import sys
@@ -1125,8 +1126,12 @@ OFFLINE = os.path.join(DATA, "offline")
 ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/"
 PLACES = "https://rbuilder1.github.io/camatlas/places/"
 TILE_PATH = re.compile(r"^/tile/((?:Canvas|Reference)/[A-Za-z_]+|World_Imagery)/(\d{1,2})/(\d{1,7})/(\d{1,7})$")
-PLACE_PATH = re.compile(r"^/places/(index\.json|power-all\.json|(?:gas|springs|power)/-?\d{1,4}\.-?\d{1,4}\.json)$")
-OFFLINE_CAP = 1500 << 20  # bytes kept; past this the oldest copies go
+PLACE_PATH = re.compile(r"^/places/(index\.json|(?:power|gas)-all\.json|(?:gas|springs|power)/-?\d{1,4}\.-?\d{1,4}\.json)$")
+OFFLINE_CAP = 1500 << 20  # bytes of map tiles kept; past this the oldest go
+# Layers kept whole, not just where the map has been: every US gas station, downloaded about once a
+# week while online (the file is ~20 MB, a few MB as sent) and split into the same tiles the map asks for.
+ALL_OFFLINE = ("gas",)
+ALL_EVERY = 7 * 86400
 _offline_writes = 0
 
 
@@ -1160,9 +1165,9 @@ def offline_get(url, path, fresh):
 
 
 def prune_offline():
-    """Keeps the offline copies under OFFLINE_CAP by dropping the ones fetched longest ago."""
+    """Keeps the map tile copies under OFFLINE_CAP by dropping the ones fetched longest ago."""
     files = []
-    for d, _, names in os.walk(OFFLINE):
+    for d, _, names in os.walk(os.path.join(OFFLINE, "tiles")):
         for n in names:
             p = os.path.join(d, n)
             try:
@@ -1179,6 +1184,61 @@ def prune_offline():
             total -= size
         except OSError:
             pass
+
+
+def all_marker(layer):
+    return os.path.join(OFFLINE, "places", f"{layer}.all")  # holds when the whole layer was last kept
+
+
+def keep_all_layers():
+    """Background: keeps every place of the ALL_OFFLINE layers on this device, refreshed weekly."""
+    time.sleep(60)  # after the map and camera lists have loaded
+    while True:
+        for layer in ALL_OFFLINE:
+            try:
+                if time.time() - os.path.getmtime(all_marker(layer)) < ALL_EVERY:
+                    continue
+            except OSError:
+                pass
+            try:
+                n = split_all(layer, fetch(f"{PLACES}{layer}-all.json", timeout=300).decode("utf-8"))
+                print(f"CamAtlas: kept all {n} {layer} places for offline use", flush=True)
+            except Exception as e:  # offline, or the site unreachable: try again later
+                print(f"CamAtlas: couldn't keep all {layer} places yet:", e, flush=True)
+        time.sleep(6 * 3600)
+
+
+def split_all(layer, text):
+    """Writes [[id, lat, lon, tags], ...] (grouped by tile, as web/build_places.py writes it) out as
+    tile files, one element at a time so a phone never holds the whole layer decoded."""
+    dec, pos, n = json.JSONDecoder(), text.index("[") + 1, 0
+    tile, rows = None, []
+    folder = os.path.join(OFFLINE, "places", layer)
+    os.makedirs(folder, exist_ok=True)
+
+    def flush():
+        if rows:
+            path = os.path.join(folder, tile + ".json")
+            with open(path + ".tmp", "w", encoding="utf-8") as f:
+                json.dump(rows, f, separators=(",", ":"))
+            os.replace(path + ".tmp", path)
+
+    while True:
+        while text[pos].isspace() or text[pos] == ",":
+            pos += 1
+        if text[pos] == "]":
+            break
+        row, pos = dec.raw_decode(text, pos)
+        key = f"{math.floor(row[1] / 0.25)}.{math.floor(row[2] / 0.25)}"
+        if key != tile:
+            flush()
+            tile, rows = key, []
+        rows.append(row)
+        n += 1
+    flush()
+    with open(all_marker(layer), "w") as f:
+        f.write(str(int(time.time())))
+    return n
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -1305,6 +1365,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 name = p.group(1)
                 body, _ = offline_get(PLACES + name, os.path.join(OFFLINE, "places", *name.split("/")),
                                       6 * 3600 if name == "index.json" else 86400)
+                if body is None and name.split("/")[0] in ALL_OFFLINE and os.path.isfile(all_marker(name.split("/")[0])):
+                    body = b"[]"  # the whole layer is kept and this tile had nothing in it
                 ctype = "application/json"
             if body is None:
                 self.send_error(404)
@@ -1532,6 +1594,7 @@ def start_background():
     threading.Thread(target=sweeper, daemon=True).start()
     threading.Thread(target=health_saver, daemon=True).start()
     threading.Thread(target=prune_offline, daemon=True).start()
+    threading.Thread(target=keep_all_layers, daemon=True).start()
 
 
 def lan_ips():
