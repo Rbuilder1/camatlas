@@ -382,6 +382,23 @@ def src_usgs(_):
     return out
 
 
+def src_nysmesonet(_):
+    """NYS Mesonet (University at Albany): every weather station has a camera, statewide plus the Thruway
+    and NYC networks. .../image/<net>/<stid>/latest is a fixed address for the newest picture (every 5 min
+    by day) and sends ACAO=*, so it works straight from the page with no server in between."""
+    base = "https://api.nysmesonet.org"
+    out = []
+    for net, label in (("nysm", ""), ("thruway", " (Thruway)"), ("nyc", " (NYC)")):
+        for f in fetch_json(f"{base}/meta/geoinfo/index.php/geojson/{net}").get("features", []):
+            p = f.get("properties") or {}
+            if p.get("decommissioned") or not p.get("stid"):
+                continue
+            out.append(cam(f"{net}-{p['stid']}", f"{p['name']}{label} weather station", p["lat"], p["lon"],
+                           f"{base}/cam/index.php/image/{net}/{p['stid']}/latest",
+                           region=f"{p['county']} County, NY" if p.get("county") else "New York"))
+    return out
+
+
 def src_michigan(_):
     import re
     out = []
@@ -623,6 +640,7 @@ SOURCES = [
     ("caltrans", "Caltrans (California)", src_caltrans, "Caltrans cwwp2.dot.ca.gov"),
     ("nyc", "NYC DOT (New York City)", src_nyc, "NYC DOT webcams.nyctmc.org"),
     ("ny511", "511NY (NY State & Hudson Valley)", carsprogram("nysdot", "New York", "NY", skip_owner="NYC DOT"), "511NY / NYSDOT, 511ny.org"),
+    ("nysmesonet", "NYS Mesonet weather cameras", src_nysmesonet, "NYS Mesonet, University at Albany, nysmesonet.org"),
     ("minnesota", "MnDOT (Minnesota)", carsprogram("mn", "Minnesota", "MN"), "Minnesota DOT, 511mn.org"),
     ("colorado", "CDOT (Colorado)", carsprogram("co", "Colorado", "CO"), "Colorado DOT, COtrip.org"),
     ("austin", "City of Austin, TX", src_austin, "City of Austin, TX, data.austintexas.gov"),
