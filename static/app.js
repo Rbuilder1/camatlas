@@ -27,7 +27,10 @@ const map = L.map('map', { zoomControl: false, worldCopyJump: true, minZoom: 2 }
 // Two basemaps (both keyless Esri): the dark canvas, and satellite imagery with road and
 // place labels on top so you can still tell which highway a camera is watching.
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
-const tile = (path, opts = {}) => L.tileLayer(ESRI + path + '/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, ...opts });
+// With the app's own server (phone, PC) tiles go through /tile/, which keeps a copy for offline use;
+// the hosted copy fetches them directly and its service worker keeps the copies.
+const tile = (path, opts = {}) => L.tileLayer(window.CAMATLAS_STATIC ? ESRI + path + '/MapServer/tile/{z}/{y}/{x}'
+  : 'tile/' + path + '/{z}/{y}/{x}', { maxZoom: 19, crossOrigin: true, ...opts });
 const CREDIT = ' · Camera credits under Sources';
 const BASEMAPS = {
   dark: [
@@ -196,7 +199,7 @@ const PLACE_KEEP = 7 * 864e5;      // remembered tiles are reused for a week
 // Every US state comes pre-built with the hosted site (web/build_places.py, weekly
 // from Geofabrik's OSM extracts), so those tiles load instantly even when Overpass is busy. The index
 // lists which tiles are covered; everywhere else still asks Overpass.
-const PLACES_URL = window.CAMATLAS_STATIC ? 'places/' : 'https://rbuilder1.github.io/camatlas/places/';  // STATIC isn't defined yet here
+const PLACES_URL = 'places/';  // the hosted site's own files, or the app server's offline-kept copy of them
 let placesIndex = null;
 const builtTiles = () => (placesIndex ??= fetch(PLACES_URL + 'index.json').then((r) => r.json())
   .then((d) => new Set(d.covered)).catch(() => { placesIndex = null; return new Set(); }));
@@ -1095,3 +1098,10 @@ Promise.all([loadState(), loadCameras()]).then(renderFavs).catch((e) => {
 // Restored only here, once the whole script has run: set() shows a toast, and calling it up where the
 // layers are defined (before toast's own variables exist) threw and stopped the page from loading.
 for (const p of PLACE_LAYERS) if (p.on) p.set(true);
+
+// Offline, the map squares and springs / gas stations already looked at, and the camera spots, still
+// show (kept by the app server or the service worker); only pictures and video need a connection.
+const offlineNote = () => toast("You're offline: the map and camera spots you've seen before still show; pictures and video need internet", 6000);
+if (!navigator.onLine) offlineNote();
+addEventListener('offline', offlineNote);
+addEventListener('online', () => toast('Back online'));

@@ -1116,6 +1116,71 @@ share_app = None
 app_info = {}
 
 
+# ---------------------------------------------------------------- offline copies
+# Map tiles and the pre-built springs / gas station tiles come through here, so a copy of whatever
+# has been looked at stays on this device for when there's no connection. They live under DATA,
+# not in the WebView's storage, which an app update wipes. Online, a copy is reused while it's
+# fresh (a day, like the tile server's own cache time) and refreshed after; offline, any copy does.
+OFFLINE = os.path.join(DATA, "offline")
+ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/"
+PLACES = "https://rbuilder1.github.io/camatlas/places/"
+TILE_PATH = re.compile(r"^/tile/((?:Canvas|Reference)/[A-Za-z_]+|World_Imagery)/(\d{1,2})/(\d{1,7})/(\d{1,7})$")
+PLACE_PATH = re.compile(r"^/places/(index\.json|(?:gas|springs)/-?\d{1,4}\.-?\d{1,4}\.json)$")
+OFFLINE_CAP = 1500 << 20  # bytes kept; past this the oldest copies go
+_offline_writes = 0
+
+
+def offline_get(url, path, fresh):
+    """(bytes, from_copy) for url, keeping a copy at path; (None, False) when it's neither
+    reachable nor kept."""
+    try:
+        age = time.time() - os.path.getmtime(path)
+    except OSError:
+        age = None
+    if age is None or age > fresh:
+        try:
+            body = fetch(url, timeout=20)
+        except Exception:
+            body = None
+        if body:
+            global _offline_writes
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = f"{path}.{threading.get_ident()}.tmp"
+            with open(tmp, "wb") as f:
+                f.write(body)
+            os.replace(tmp, path)
+            _offline_writes += 1
+            if _offline_writes % 2000 == 0:
+                threading.Thread(target=prune_offline, daemon=True).start()
+            return body, False
+        if age is None:
+            return None, False
+    with open(path, "rb") as f:
+        return f.read(), True
+
+
+def prune_offline():
+    """Keeps the offline copies under OFFLINE_CAP by dropping the ones fetched longest ago."""
+    files = []
+    for d, _, names in os.walk(OFFLINE):
+        for n in names:
+            p = os.path.join(d, n)
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            files.append((st.st_mtime, st.st_size, p))
+    total = sum(f[1] for f in files)
+    for _, size, p in sorted(files):
+        if total <= OFFLINE_CAP:
+            break
+        try:
+            os.remove(p)
+            total -= size
+        except OSError:
+            pass
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {
         **http.server.SimpleHTTPRequestHandler.extensions_map,
@@ -1229,6 +1294,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(img)
+            return
+        if (m := TILE_PATH.match(url.path)) or (p := PLACE_PATH.match(url.path)):
+            if m:
+                layer, z, y, x = m.groups()
+                body, _ = offline_get(f"{ESRI}{layer}/MapServer/tile/{z}/{y}/{x}",
+                                      os.path.join(OFFLINE, "tiles", *layer.split("/"), z, y, x), 86400)
+                ctype = "image/png" if body and body[:4] == b"\x89PNG" else "image/jpeg"
+            else:
+                name = p.group(1)
+                body, _ = offline_get(PLACES + name, os.path.join(OFFLINE, "places", *name.split("/")),
+                                      6 * 3600 if name == "index.json" else 86400)
+                ctype = "application/json"
+            if body is None:
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(body)
             return
         if url.path == "/CamAtlas.apk":
             # Served from DATA (not the source repo's android/dist, which an installed copy
@@ -1445,6 +1531,7 @@ def start_background():
     threading.Thread(target=scheduler, daemon=True).start()
     threading.Thread(target=sweeper, daemon=True).start()
     threading.Thread(target=health_saver, daemon=True).start()
+    threading.Thread(target=prune_offline, daemon=True).start()
 
 
 def lan_ips():
