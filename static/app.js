@@ -177,7 +177,7 @@ const PLACE_MIN_ZOOM = 11;
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
 const PLACE_TILE = 0.25;           // degrees; places are fetched and remembered per tile
 const PLACE_KEEP = 7 * 864e5;      // remembered tiles are reused for a week
-// New York, New Jersey and Connecticut come pre-built with the hosted site (web/build_places.py, weekly
+// Every US state comes pre-built with the hosted site (web/build_places.py, weekly
 // from Geofabrik's OSM extracts), so those tiles load instantly even when Overpass is busy. The index
 // lists which tiles are covered; everywhere else still asks Overpass.
 const PLACES_URL = window.CAMATLAS_STATIC ? 'places/' : 'https://rbuilder1.github.io/camatlas/places/';  // STATIC isn't defined yet here
@@ -243,7 +243,7 @@ function placesLayer({ key, label, btn, pin, svg, select, keep, title, popup }) 
       }
     updateStats();
     if (!missing.length) { P.busy = false; return; }
-    // Pre-built tiles (NY/NJ/CT) straight from the site; only what they don't cover goes to Overpass.
+    // Pre-built tiles (every US state) straight from the site; only what they don't cover goes to Overpass.
     await Promise.all(missing.map(async ([i, j]) => {
       if (!built.has(`${i}.${j}`)) { remote.push([i, j]); return; }
       try {
