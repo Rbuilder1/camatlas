@@ -29,6 +29,23 @@ jobs:
           python-version: "3.12"
       - name: Download camera lists and build the site
         run: python web/build_static.py --out site
+      # Springs and gas stations for NY/NJ/CT, pre-built so the map doesn't depend on the busy public
+      # Overpass servers there. The state extracts are cached for the week (Geofabrik updates daily).
+      - id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: osm
+          key: osm-${{ steps.week.outputs.week }}
+      - name: Build map places (springs, gas stations)
+        run: |
+          sudo apt-get install -y -qq osmium-tool >/dev/null
+          mkdir -p osm
+          for s in new-york new-jersey connecticut; do
+            [ -f "osm/$s.osm.pbf" ] || curl -sSfL --retry 3 -o "osm/$s.osm.pbf" "https://download.geofabrik.de/north-america/us/$s-latest.osm.pbf"
+            [ -f "osm/$s.poly" ] || curl -sSfL --retry 3 -o "osm/$s.poly" "https://download.geofabrik.de/north-america/us/$s.poly"
+          done
+          python web/build_places.py --out site/places osm/new-york.osm.pbf osm/new-jersey.osm.pbf osm/connecticut.osm.pbf
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

@@ -246,14 +246,17 @@ input[type=password], input[type=text] { height: 34px; padding: 0 10px; backgrou
 .install ol { margin: 14px 0 6px; padding-left: 22px; display: grid; gap: 9px; font-size: 15px; }
 .install li svg { width: 19px; height: 19px; vertical-align: -4px; color: var(--blue); }
 
-/* gas stations layer */
+/* places layers: gas stations, springs */
 .mapctl button.on { border-color: #3ecf8e; color: #3ecf8e; }
 .pin.gas { width: 22px; height: 22px; border-radius: 50%; background: #3ecf8e; border: 2px solid #0b0c0f; display: grid; place-items: center; color: #0b0c0f; }
 .pin.gas svg { width: 12px; height: 12px; stroke-width: 2.4; }
-.gas-popup .leaflet-popup-content { margin: 12px 14px; font-size: 13px; line-height: 1.45; }
-.gas-popup .gname { display: block; font-size: 15px; margin-bottom: 2px; }
-.gas-popup .gfuel { margin: 4px 0 8px; }
-.gas-popup .gdir { display: inline-flex; align-items: center; height: 32px; margin: 2px 0 8px; text-decoration: none; }
-.gas-popup .leaflet-popup-content-wrapper { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
-.gas-popup .leaflet-popup-tip { background: var(--panel); }
-.gas-popup .muted { color: var(--muted); }
+.place-popup .leaflet-popup-content { margin: 12px 14px; font-size: 13px; line-height: 1.45; }
+.place-popup .pname { display: block; font-size: 15px; margin-bottom: 2px; }
+.place-popup .plines { margin: 2px 0 8px; }
+.place-popup .pdir { display: inline-flex; align-items: center; height: 32px; margin: 2px 0 8px; text-decoration: none; }
+.place-popup .leaflet-popup-content-wrapper { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.place-popup .leaflet-popup-tip { background: var(--panel); }
+.place-popup .muted { color: var(--muted); }
+.pin.spring { width: 22px; height: 22px; border-radius: 50%; background: #2dd4bf; border: 2px solid #0b0c0f; display: grid; place-items: center; color: #0b0c0f; }
+.pin.spring svg { width: 12px; height: 12px; stroke-width: 2.4; fill: currentColor; }
+#springBtn.on { border-color: #2dd4bf; color: #2dd4bf; }

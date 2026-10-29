@@ -169,50 +169,23 @@ function setFlock(on) {
   else { map.removeLayer(flockLayer); updateStats(); }
 }
 
-// ------------------------------------------------------------------ gas stations
-// OpenStreetMap's fuel stations (amenity=fuel) from the public Overpass API, fetched for the area in
-// view once zoomed in to town level; there are far too many to load for a whole country. Straight from
-// the page, so it works the same in the app, on the hosted copy and on the PC. No prices: OSM has none.
-const GAS_MIN_ZOOM = 11;
+// ------------------------------------------------------------------ places layers (gas stations, springs)
+// OpenStreetMap places from the public Overpass API, fetched for the area in view once zoomed in to
+// town level; there are far too many to load for a whole country. Straight from the page, so it works
+// the same in the app, on the hosted copy and on the PC. Each layer is a button in the map controls.
+const PLACE_MIN_ZOOM = 11;
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
-const GAS_TILE = 0.25;             // degrees; stations are fetched and remembered per tile
-const GAS_KEEP = 7 * 864e5;        // remembered tiles are reused for a week
-const gasTileKey = (i, j) => `gas.${i}.${j}`;
-const GAS_ICON = L.divIcon({ html: '<div class="pin gas"><svg viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M7 8h5M15 10h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V9l-3-3"/></svg></div>',
-  className: '', iconSize: [22, 22], iconAnchor: [11, 11] });
-const gasLayer = L.layerGroup();
-const gasSeen = new Map();     // OSM id -> marker, so panning back never draws a station twice
-let gasOn = store.get('gas', false), gasBusy = false;
-const gasTilesDone = new Set();   // tiles drawn this session
-
-function gasPopup(t, lat, lon) {
-  const el = document.createElement('div');
-  const name = t.name || t.brand || 'Gas station';
-  const addr = [[t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' '), t['addr:city']].filter(Boolean).join(', ');
-  const fuels = Object.keys(t).filter((k) => k.startsWith('fuel:') && t[k] === 'yes')
-    .map((k) => k.slice(5).replace(/_/g, ' ').replace(/^octane /, '') ).join(', ');
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
-  const dir = ios ? `https://maps.apple.com/?daddr=${lat},${lon}` : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
-  el.innerHTML = '<b class="gname"></b><div class="muted gmeta"></div><div class="gfuel"></div>'
-    + `<a class="btn gdir" href="${dir}" target="_blank" rel="noopener">Directions</a>`
-    + '<div class="muted small">© OpenStreetMap contributors</div>';
-  el.querySelector('.gname').textContent = name + (t.brand && t.name && !t.name.includes(t.brand) ? ` (${t.brand})` : '');
-  el.querySelector('.gmeta').textContent = [addr, t.opening_hours === '24/7' ? 'Open 24 hours' : t.opening_hours].filter(Boolean).join(' · ');
-  el.querySelector('.gfuel').textContent = fuels ? 'Fuel: ' + fuels : '';
-  return el;
-}
-
-// Only the tags the popup uses are kept, so a week of browsing fits easily in the phone's storage.
-const GAS_TAGS = /^(name|brand|opening_hours|addr:(housenumber|street|city)|fuel:.*)$/;
-
-function drawGas(stations) {
-  for (const [key, lat, lon, t] of stations) {
-    if (gasSeen.has(key)) continue;
-    gasSeen.set(key, L.marker([lat, lon], { icon: GAS_ICON, title: t.name || t.brand || 'Gas station', zIndexOffset: -100 })
-      .bindPopup(() => gasPopup(t, lat, lon), { className: 'gas-popup', maxWidth: 280 })
-      .addTo(gasLayer));
-  }
-}
+const PLACE_TILE = 0.25;           // degrees; places are fetched and remembered per tile
+const PLACE_KEEP = 7 * 864e5;      // remembered tiles are reused for a week
+// New York, New Jersey and Connecticut come pre-built with the hosted site (web/build_places.py, weekly
+// from Geofabrik's OSM extracts), so those tiles load instantly even when Overpass is busy. The index
+// lists which tiles are covered; everywhere else still asks Overpass.
+const PLACES_URL = window.CAMATLAS_STATIC ? 'places/' : 'https://rbuilder1.github.io/camatlas/places/';  // STATIC isn't defined yet here
+let placesIndex = null;
+const builtTiles = () => (placesIndex ??= fetch(PLACES_URL + 'index.json').then((r) => r.json())
+  .then((d) => new Set(d.covered)).catch(() => { placesIndex = null; return new Set(); }));
+const directionsUrl = (lat, lon) => (/iPhone|iPad|iPod/.test(navigator.userAgent)
+  ? `https://maps.apple.com/?daddr=${lat},${lon}` : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`);
 
 // Public Overpass servers are often at capacity, so the same query goes to two at once and the first
 // good answer wins; the other request is cancelled.
@@ -233,65 +206,146 @@ async function overpass(q) {
   }
 }
 
-async function loadGas() {
-  if (!gasOn || gasBusy) return;
-  if (map.getZoom() < GAS_MIN_ZOOM) { updateStats(); return; }
-  const b = map.getBounds().pad(0.2);
-  const tiles = [];
-  for (let i = Math.floor(b.getSouth() / GAS_TILE); i <= Math.floor(b.getNorth() / GAS_TILE); i++)
-    for (let j = Math.floor(b.getWest() / GAS_TILE); j <= Math.floor(b.getEast() / GAS_TILE); j++) tiles.push([i, j]);
-  const missing = [];
-  for (const [i, j] of tiles) {  // tiles remembered from earlier (this week) draw straight away
-    const k = gasTileKey(i, j);
-    if (gasTilesDone.has(k)) continue;
-    const saved = store.get(k, null);
-    if (saved && Date.now() - saved.t < GAS_KEEP) { drawGas(saved.s); gasTilesDone.add(k); }
-    else missing.push([i, j]);
-  }
-  updateStats();
-  if (!missing.length) return;
-  const s = Math.min(...missing.map((m) => m[0])) * GAS_TILE, n = (Math.max(...missing.map((m) => m[0])) + 1) * GAS_TILE;
-  const w = Math.min(...missing.map((m) => m[1])) * GAS_TILE, e = (Math.max(...missing.map((m) => m[1])) + 1) * GAS_TILE;
-  const box = [s, w, n, e].map((v) => v.toFixed(4)).join(',');
-  const q = `[out:json][timeout:50];(node["amenity"="fuel"](${box});way["amenity"="fuel"](${box}););out center tags 3000;`;
-  gasBusy = true;
-  const slow = setTimeout(() => toast('Loading gas stations…'), 1500);
-  try {
-    const data = await overpass(q);
-    const byTile = new Map(missing.map(([i, j]) => [gasTileKey(i, j), []]));
-    for (const el of data.elements || []) {
-      const lat = el.lat ?? (el.center && el.center.lat), lon = el.lon ?? (el.center && el.center.lon);
-      if (lat == null) continue;
-      const tags = Object.fromEntries(Object.entries(el.tags || {}).filter(([k]) => GAS_TAGS.test(k)));
-      const list = byTile.get(gasTileKey(Math.floor(lat / GAS_TILE), Math.floor(lon / GAS_TILE)));
-      if (list) list.push([el.type + el.id, +lat.toFixed(6), +lon.toFixed(6), tags]);
-    }
-    for (const [k, list] of byTile) { store.set(k, { t: Date.now(), s: list }); drawGas(list); gasTilesDone.add(k); }
-    loadGasSoon();  // picks up any area the map moved to while this was loading
-  } catch {
-    toast('Gas station servers are busy right now; try again in a minute');
-  }
-  clearTimeout(slow);
-  gasBusy = false;
-  updateStats();
-}
-const loadGasSoon = (() => { let t; return () => { clearTimeout(t); t = setTimeout(loadGas, 600); }; })();
-map.on('moveend', () => { if (gasOn) loadGasSoon(); });
+// One layer of OSM places: `select(box)` is the Overpass selection, `keep` the tags worth storing
+// (tiles stay in the phone's storage for a week, so only what the popup shows), `popup(tags, lat, lon)`.
+function placesLayer({ key, label, btn, pin, svg, select, keep, title, popup }) {
+  const icon = L.divIcon({ html: `<div class="pin ${pin}"><svg viewBox="0 0 24 24">${svg}</svg></div>`,
+    className: '', iconSize: [22, 22], iconAnchor: [11, 11] });
+  const layer = L.layerGroup(), done = new Set();   // tiles drawn this session
+  const P = { label, on: store.get(key, false), busy: false, seen: new Map() };  // OSM id -> marker
+  const tileKey = (i, j) => `${key}.${i}.${j}`;
 
-function setGas(on) {
-  gasOn = on;
-  store.set('gas', on);
-  $('gasBtn').classList.toggle('on', on);
-  if (on) {
-    map.addLayer(gasLayer);
-    if (map.getZoom() < GAS_MIN_ZOOM) toast('Zoom in to a town to see gas stations');
-    loadGas();
-  } else {
-    map.removeLayer(gasLayer);
+  function draw(list) {
+    for (const [id, lat, lon, t] of list) {
+      if (P.seen.has(id)) continue;
+      P.seen.set(id, L.marker([lat, lon], { icon, title: title(t), zIndexOffset: -100 })
+        .bindPopup(() => popup(t, lat, lon), { className: 'place-popup', maxWidth: 280 })
+        .addTo(layer));
+    }
+  }
+
+  async function load() {
+    if (!P.on || P.busy) return;
+    if (map.getZoom() < PLACE_MIN_ZOOM) { updateStats(); return; }
+    const b = map.getBounds().pad(0.2);
+    const missing = [];
+    for (let i = Math.floor(b.getSouth() / PLACE_TILE); i <= Math.floor(b.getNorth() / PLACE_TILE); i++)
+      for (let j = Math.floor(b.getWest() / PLACE_TILE); j <= Math.floor(b.getEast() / PLACE_TILE); j++) {
+        const k = tileKey(i, j);
+        if (done.has(k)) continue;
+        const saved = store.get(k, null);  // tiles remembered from earlier this week draw straight away
+        if (saved && Date.now() - saved.t < PLACE_KEEP) { draw(saved.s); done.add(k); }
+        else missing.push([i, j]);
+      }
+    updateStats();
+    if (!missing.length) return;
+    P.busy = true;
+    // Pre-built tiles (NY/NJ/CT) straight from the site; only what they don't cover goes to Overpass.
+    const built = await builtTiles(), remote = [];
+    await Promise.all(missing.map(async ([i, j]) => {
+      if (!built.has(`${i}.${j}`)) { remote.push([i, j]); return; }
+      try {
+        const r = await fetch(`${PLACES_URL}${key}/${i}.${j}.json`);
+        if (!r.ok) throw new Error(r.status);
+        draw(await r.json());
+        done.add(tileKey(i, j));
+      } catch {
+        remote.push([i, j]);
+      }
+    }));
+    updateStats();
+    if (!remote.length) { P.busy = false; return; }
+    const s = Math.min(...remote.map((m) => m[0])) * PLACE_TILE, n = (Math.max(...remote.map((m) => m[0])) + 1) * PLACE_TILE;
+    const w = Math.min(...remote.map((m) => m[1])) * PLACE_TILE, e = (Math.max(...remote.map((m) => m[1])) + 1) * PLACE_TILE;
+    const box = [s, w, n, e].map((v) => v.toFixed(4)).join(',');
+    const slow = setTimeout(() => toast(`Loading ${label}…`), 1500);
+    try {
+      const data = await overpass(`[out:json][timeout:50];(${select(box)});out center tags 3000;`);
+      const byTile = new Map(remote.map(([i, j]) => [tileKey(i, j), []]));
+      for (const el of data.elements || []) {
+        const lat = el.lat ?? (el.center && el.center.lat), lon = el.lon ?? (el.center && el.center.lon);
+        if (lat == null) continue;
+        const tags = Object.fromEntries(Object.entries(el.tags || {}).filter(([k]) => keep.test(k)));
+        const list = byTile.get(tileKey(Math.floor(lat / PLACE_TILE), Math.floor(lon / PLACE_TILE)));
+        if (list) list.push([el.type + el.id, +lat.toFixed(6), +lon.toFixed(6), tags]);
+      }
+      for (const [k, list] of byTile) { store.set(k, { t: Date.now(), s: list }); draw(list); done.add(k); }
+      loadSoon();  // picks up any area the map moved to while this was loading
+    } catch {
+      toast(`The ${label} servers are busy right now; try again in a minute`);
+    }
+    clearTimeout(slow);
+    P.busy = false;
     updateStats();
   }
+  const loadSoon = (() => { let t; return () => { clearTimeout(t); t = setTimeout(load, 600); }; })();
+  map.on('moveend', () => { if (P.on) loadSoon(); });
+
+  P.set = (on) => {
+    P.on = on;
+    store.set(key, on);
+    $(btn).classList.toggle('on', on);
+    if (on) {
+      map.addLayer(layer);
+      if (map.getZoom() < PLACE_MIN_ZOOM) toast(`Zoom in to a town to see ${label}`);
+      load();
+    } else {
+      map.removeLayer(layer);
+      updateStats();
+    }
+  };
+  $(btn).onclick = () => P.set(!P.on);
+  return P;
 }
-$('gasBtn').onclick = () => setGas(!gasOn);
+
+// Fills a popup: a bold name, grey detail lines, Directions, and the OSM credit (all text set safely).
+function placePopup(name, lines, lat, lon) {
+  const el = document.createElement('div');
+  el.innerHTML = '<b class="pname"></b><div class="plines muted"></div>'
+    + `<a class="btn pdir" href="${directionsUrl(lat, lon)}" target="_blank" rel="noopener">Directions</a>`
+    + '<div class="muted small">© OpenStreetMap contributors</div>';
+  el.querySelector('.pname').textContent = name;
+  for (const line of lines.filter(Boolean)) {
+    const d = document.createElement('div');
+    d.textContent = line;
+    el.querySelector('.plines').append(d);
+  }
+  return el;
+}
+
+const gas = placesLayer({
+  key: 'gas', label: 'gas stations', btn: 'gasBtn', pin: 'gas',
+  svg: '<path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M7 8h5M15 10h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V9l-3-3"/>',
+  select: (box) => `node["amenity"="fuel"](${box});way["amenity"="fuel"](${box});`,
+  keep: /^(name|brand|opening_hours|addr:(housenumber|street|city)|fuel:.*)$/,
+  title: (t) => t.name || t.brand || 'Gas station',
+  popup: (t, lat, lon) => {
+    const addr = [[t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' '), t['addr:city']].filter(Boolean).join(', ');
+    const fuels = Object.keys(t).filter((k) => k.startsWith('fuel:') && t[k] === 'yes')
+      .map((k) => k.slice(5).replace(/_/g, ' ').replace(/^octane /, '')).join(', ');
+    return placePopup((t.name || t.brand || 'Gas station') + (t.brand && t.name && !t.name.includes(t.brand) ? ` (${t.brand})` : ''),
+      [[addr, t.opening_hours === '24/7' ? 'Open 24 hours' : t.opening_hours].filter(Boolean).join(' · '),
+       fuels && 'Fuel: ' + fuels], lat, lon);
+  },
+});
+
+// Natural springs (natural=spring). OSM's drinking_water tag is someone's report, not a water test.
+const springs = placesLayer({
+  key: 'springs', label: 'springs', btn: 'springBtn', pin: 'spring',
+  svg: '<path d="M12 3c3.5 4.5 6 7.8 6 10.5a6 6 0 0 1-12 0C6 10.8 8.5 7.5 12 3z"/>',
+  select: (box) => `node["natural"="spring"](${box});`,
+  keep: /^(name|drinking_water|seasonal|intermittent|description|access|ele)$/,
+  title: (t) => t.name || 'Spring',
+  popup: (t, lat, lon) => placePopup(t.name || 'Spring', [
+    t.drinking_water === 'yes' ? 'Mapped as drinkable (not tested; treat before drinking)'
+      : t.drinking_water === 'no' ? 'Not drinkable' : 'Drinkability unknown; treat before drinking',
+    (t.seasonal === 'yes' || t.intermittent === 'yes') && 'May dry up in some seasons',
+    t.access === 'private' && 'On private land',
+    t.ele && `Elevation ${Math.round(+t.ele * 3.281).toLocaleString()} ft`,
+    t.description,
+  ], lat, lon),
+});
+const PLACE_LAYERS = [gas, springs];
 
 $('zin').onclick = () => map.zoomIn();
 $('zout').onclick = () => map.zoomOut();
@@ -445,7 +499,7 @@ function updateStats(loading = S.sources.filter((s) => s.loading).map((s) => s.i
   $('stats').textContent = [
     `${shown.toLocaleString()} cameras · ${live.toLocaleString()} with video · ${srcs} sources`,
     flockTotal && `${flockTotal.toLocaleString()} Flock ALPRs (${flockView.toLocaleString()} in view)`,
-    gasOn && (map.getZoom() < GAS_MIN_ZOOM ? 'zoom in for gas stations' : `${gasSeen.size.toLocaleString()} gas stations`),
+    ...PLACE_LAYERS.map((p) => p.on && (map.getZoom() < PLACE_MIN_ZOOM ? `zoom in for ${p.label}` : `${p.seen.size.toLocaleString()} ${p.label}`)),
     loading.length && `updating ${loading.join(', ')}…`,
   ].filter(Boolean).join(' · ');
 }
@@ -1020,6 +1074,6 @@ document.addEventListener('keydown', (e) => {
 Promise.all([loadState(), loadCameras()]).then(renderFavs).catch((e) => {
   $('stats').textContent = 'Could not reach the CamPit server: ' + e.message;
 });
-// Restored only here, once the whole script has run: setGas shows a toast, and calling it up where the
-// gas layer is defined (before toast's own variables exist) threw and stopped the page from loading.
-if (gasOn) setGas(true);
+// Restored only here, once the whole script has run: set() shows a toast, and calling it up where the
+// layers are defined (before toast's own variables exist) threw and stopped the page from loading.
+for (const p of PLACE_LAYERS) if (p.on) p.set(true);
