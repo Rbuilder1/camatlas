@@ -80,6 +80,73 @@ def centre(geom):
     return (min(lats) + max(lats)) / 2, (min(lons) + max(lons)) / 2
 
 
+def usgs_springs(polys):
+    """Springs only the USGS has: named springs from its place-names list (GNIS) and springs/seeps on
+    its water map (NHD, ftype 458), inside the downloaded states. Both are public ArcGIS services."""
+    import urllib.parse
+    import urllib.request
+
+    def query(url, where, box):
+        out, offset = [], 0
+        while True:
+            q = urllib.parse.urlencode({"where": where, "geometry": ",".join(map(str, box)), "geometryType": "esriGeometryEnvelope",
+                                        "inSR": 4326, "outSR": 4326, "outFields": "*", "f": "json",
+                                        "resultOffset": offset, "resultRecordCount": 1000})
+            req = urllib.request.Request(f"{url}/query?{q}", headers={"User-Agent": "CamAtlas/1.0 (public camera map)"})
+            d = json.loads(urllib.request.urlopen(req, timeout=120).read())
+            feats = d.get("features") or []
+            out += feats
+            offset += len(feats)
+            if not feats or not d.get("exceededTransferLimit"):
+                return out
+
+    found = []
+    for rings in polys:
+        lons = [x for _, r in rings for x, _ in r]
+        lats = [y for _, r in rings for _, y in r]
+        box = (min(lons), min(lats), max(lons), max(lats))
+        for f in query("https://carto.nationalmap.gov/arcgis/rest/services/geonames/MapServer/7", "gaz_featureclass='Spring'", box):
+            a, g = f["attributes"], f["geometry"]
+            found.append((f"gnis{a['gaz_id']}", g["y"], g["x"], {"name": a.get("gaz_name") or "Spring",
+                                                                 "description": "Named spring in the USGS place-names list"}))
+        for f in query("https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/0", "ftype=458", box):
+            a = {k.lower(): v for k, v in f["attributes"].items()}  # this service's field names are upper case
+            g = f["geometry"]
+            tags = {"description": "Spring or seep on the USGS water map"}
+            if a.get("gnis_name"):
+                tags["name"] = a["gnis_name"]
+            found.append((f"nhd{a.get('permanent_identifier') or a.get('objectid')}", g["y"], g["x"], tags))
+    # Keep the ones inside the states (the boxes overlap neighbours), once each.
+    seen, out = set(), []
+    for oid, lat, lon, tags in found:
+        if oid not in seen and any(inside(lon, lat, r) for r in polys):
+            seen.add(oid)
+            out.append((oid, lat, lon, tags))
+    return out
+
+
+def near(a, b, metres):
+    dy = math.radians(b[0] - a[0]) * 6371000
+    dx = math.radians(b[1] - a[1]) * 6371000 * math.cos(math.radians(a[0]))
+    return math.hypot(dx, dy) < metres
+
+
+def add_usgs(springs, extra):
+    """Add USGS springs that OpenStreetMap doesn't already have (within 300 m, or the same name within 3 km).
+    `springs` is the springs layer's {tile key: {id: [id, lat, lon, tags]}}. Returns how many were added."""
+    added = 0
+    for oid, lat, lon, tags in extra:
+        i, j = math.floor(lat / TILE), math.floor(lon / TILE)
+        nearby = [s for di in (-1, 0, 1) for dj in (-1, 0, 1) for s in springs.get(f"{i + di}.{j + dj}", {}).values()]
+        name = (tags.get("name") or "").lower()
+        if any(near((lat, lon), (s[1], s[2]), 300) or (name and (s[3].get("name") or "").lower() == name and near((lat, lon), (s[1], s[2]), 3000))
+               for s in nearby):
+            continue
+        springs.setdefault(f"{i}.{j}", {})[oid] = [oid, round(lat, 6), round(lon, 6), tags]
+        added += 1
+    return added
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -106,6 +173,11 @@ def main():
                     if wanted(t):
                         kept = {k: v for k, v in t.items() if keep.match(k)}
                         tiles[name].setdefault(key, {})[oid] = [oid, round(lat, 6), round(lon, 6), kept]
+
+    try:
+        print("USGS springs added:", add_usgs(tiles["springs"], usgs_springs(polys)))
+    except Exception as e:  # a USGS outage shouldn't stop the weekly build; OSM springs still go out
+        print("USGS springs skipped:", e)
 
     # Covered = every corner inside one of the downloaded states.
     covered = set()
