@@ -1125,7 +1125,7 @@ OFFLINE = os.path.join(DATA, "offline")
 ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/"
 PLACES = "https://rbuilder1.github.io/camatlas/places/"
 TILE_PATH = re.compile(r"^/tile/((?:Canvas|Reference)/[A-Za-z_]+|World_Imagery)/(\d{1,2})/(\d{1,7})/(\d{1,7})$")
-PLACE_PATH = re.compile(r"^/places/(index\.json|(?:gas|springs|power)/-?\d{1,4}\.-?\d{1,4}\.json)$")
+PLACE_PATH = re.compile(r"^/places/(index\.json|power-all\.json|(?:gas|springs|power)/-?\d{1,4}\.-?\d{1,4}\.json)$")
 OFFLINE_CAP = 1500 << 20  # bytes kept; past this the oldest copies go
 _offline_writes = 0
 

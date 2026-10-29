@@ -227,33 +227,59 @@ async function overpass(q) {
 
 // One layer of OSM places: `select(box)` is the Overpass selection, `keep` the tags worth storing
 // (tiles stay in the phone's storage for a week, so only what the popup shows), `popup(tags, lat, lon)`.
-function placesLayer({ key, label, btn, pin, svg, select, keep, title, popup }) {
+// `all`: a file with every place of the layer in the pre-built area. Those then show at any zoom,
+// clustered, instead of tile by tile once zoomed in; elsewhere the layer still loads tile by tile.
+function placesLayer({ key, label, btn, pin, svg, select, keep, title, popup, all }) {
   const icon = L.divIcon({ html: `<div class="pin ${pin}"><svg viewBox="0 0 24 24">${svg}</svg></div>`,
     className: '', iconSize: [22, 22], iconAnchor: [11, 11] });
-  const layer = L.layerGroup(), done = new Set();   // tiles drawn this session
-  const P = { label, on: store.get(key, false), busy: false, seen: new Map() };  // OSM id -> marker
+  const layer = all ? L.markerClusterGroup({ chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 48,
+    iconCreateFunction(c) {
+      const n = c.getChildCount(), size = n < 10 ? 30 : n < 100 ? 36 : n < 1000 ? 42 : 48;
+      const label = n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : n;
+      return L.divIcon({ html: `<div class="clu ${pin}" style="width:${size}px;height:${size}px">${label}</div>`,
+        className: '', iconSize: [size, size] });
+    } }) : L.layerGroup();
+  const done = new Set();   // tiles drawn this session
+  const P = { label, all: !!all, on: store.get(key, false), busy: false, seen: new Map() };  // OSM id -> marker
   const tileKey = (i, j) => `${key}.${i}.${j}`;
+  let allLoaded = null;
 
   function draw(list) {
+    const added = [];
     for (const [id, lat, lon, t] of list) {
       if (P.seen.has(id)) continue;
-      P.seen.set(id, L.marker([lat, lon], { icon, title: title(t), zIndexOffset: -100 })
-        .bindPopup(() => popup(t, lat, lon), { className: 'place-popup', maxWidth: 280 })
-        .addTo(layer));
+      const m = L.marker([lat, lon], { icon, title: title(t), zIndexOffset: -100 })
+        .bindPopup(() => popup(t, lat, lon), { className: 'place-popup', maxWidth: 280 });
+      P.seen.set(id, m);
+      added.push(m);
     }
+    if (layer.addLayers) layer.addLayers(added);
+    else for (const m of added) m.addTo(layer);
   }
 
   async function load() {
     if (!P.on || P.busy) return;
+    if (all && !allLoaded) {
+      P.busy = true;
+      const slow = setTimeout(() => toast(`Loading ${label}…`), 1500);
+      allLoaded = fetch(PLACES_URL + all).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then((list) => { draw(list); return true; })
+        .catch(() => { toast(`Couldn't load all the ${label}; zoom in to load them area by area`); return false; });
+      await allLoaded;
+      clearTimeout(slow);
+      P.busy = false;
+      updateStats();
+    }
     if (map.getZoom() < PLACE_MIN_ZOOM) { updateStats(); return; }
     const b = map.getBounds().pad(0.2);
     const missing = [];
     P.busy = true;
     const built = await builtTiles(), remote = [];
+    const haveAll = all && await allLoaded;  // the pre-built area is already all drawn
     for (let i = Math.floor(b.getSouth() / PLACE_TILE); i <= Math.floor(b.getNorth() / PLACE_TILE); i++)
       for (let j = Math.floor(b.getWest() / PLACE_TILE); j <= Math.floor(b.getEast() / PLACE_TILE); j++) {
         const k = tileKey(i, j);
-        if (done.has(k)) continue;
+        if (done.has(k) || (haveAll && built.has(`${i}.${j}`))) continue;
         // Tiles remembered from earlier this week draw straight away; pre-built tiles are always
         // fetched fresh, since they change weekly and have more in them (USGS springs) than Overpass.
         const saved = built.has(`${i}.${j}`) ? null : store.get(k, null);
@@ -308,7 +334,7 @@ function placesLayer({ key, label, btn, pin, svg, select, keep, title, popup }) 
     $(btn).classList.toggle('on', on);
     if (on) {
       map.addLayer(layer);
-      if (map.getZoom() < PLACE_MIN_ZOOM) toast(`Zoom in to a town to see ${label}`);
+      if (map.getZoom() < PLACE_MIN_ZOOM && !all) toast(`Zoom in to a town to see ${label}`);
       load();
     } else {
       map.removeLayer(layer);
@@ -369,8 +395,9 @@ const springs = placesLayer({
 });
 // Power plants: OSM's power=plant, plus (in the US) every plant of 1 MW or more from the Energy
 // Information Administration, which also fills in the fuel and capacity where OSM has the plant.
+// The US ones all show at any zoom (power-all.json); elsewhere they load once zoomed in.
 const power = placesLayer({
-  key: 'power', label: 'power plants', btn: 'powerBtn', pin: 'power',
+  key: 'power', label: 'power plants', btn: 'powerBtn', pin: 'power', all: 'power-all.json',
   svg: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
   select: (box) => `nwr["power"="plant"](${box});`,
   keep: /^(name|operator|plant:source|plant:output:electricity|description)$/,
@@ -539,7 +566,7 @@ function updateStats(loading = S.sources.filter((s) => s.loading).map((s) => s.i
   $('stats').textContent = [
     camsOn ? `${shown.toLocaleString()} cameras · ${live.toLocaleString()} with video · ${srcs} sources` : 'cameras hidden',
     flockTotal && `${flockTotal.toLocaleString()} Flock ALPRs (${flockView.toLocaleString()} in view)`,
-    ...PLACE_LAYERS.map((p) => p.on && (map.getZoom() < PLACE_MIN_ZOOM ? `zoom in for ${p.label}` : `${p.seen.size.toLocaleString()} ${p.label}`)),
+    ...PLACE_LAYERS.map((p) => p.on && (map.getZoom() < PLACE_MIN_ZOOM && !p.all ? `zoom in for ${p.label}` : `${p.seen.size.toLocaleString()} ${p.label}`)),
     loading.length && `updating ${loading.join(', ')}…`,
   ].filter(Boolean).join(' · ');
 }

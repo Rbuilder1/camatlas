@@ -6,6 +6,7 @@ filters them with osmium-tool, and writes the same 0.25-degree tiles app.js's pl
 
     places/index.json             {"tile": 0.25, "covered": ["i.j", ...], "built": unix time}
     places/<layer>/<i>.<j>.json   [[osm id, lat, lon, {kept tags}], ...]   (one per covered tile)
+    places/power-all.json         every power plant in the covered tiles, in the same form
 
 Springs the USGS knows about that OpenStreetMap doesn't are added too (see usgs_springs).
 
@@ -267,6 +268,10 @@ def main():
         for key in covered:
             with open(os.path.join(args.out, name, key + ".json"), "w", encoding="utf-8") as fh:
                 json.dump(list(tiles[name].get(key, {}).values()), fh, separators=(",", ":"))
+    # Power plants are few enough (tens of thousands) to send in one file too, so the map can show them
+    # all zoomed out, clustered, instead of only tile by tile once zoomed in.
+    with open(os.path.join(args.out, "power-all.json"), "w", encoding="utf-8") as fh:
+        json.dump([p for k, v in tiles["power"].items() if k in covered for p in v.values()], fh, separators=(",", ":"))
     with open(os.path.join(args.out, "index.json"), "w", encoding="utf-8") as fh:
         json.dump({"tile": TILE, "covered": sorted(covered), "built": int(time.time())}, fh, separators=(",", ":"))
     print(f"places: {len(covered)} covered tiles;",
