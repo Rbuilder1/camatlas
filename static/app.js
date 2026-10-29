@@ -229,19 +229,21 @@ function placesLayer({ key, label, btn, pin, svg, select, keep, title, popup }) 
     if (map.getZoom() < PLACE_MIN_ZOOM) { updateStats(); return; }
     const b = map.getBounds().pad(0.2);
     const missing = [];
+    P.busy = true;
+    const built = await builtTiles(), remote = [];
     for (let i = Math.floor(b.getSouth() / PLACE_TILE); i <= Math.floor(b.getNorth() / PLACE_TILE); i++)
       for (let j = Math.floor(b.getWest() / PLACE_TILE); j <= Math.floor(b.getEast() / PLACE_TILE); j++) {
         const k = tileKey(i, j);
         if (done.has(k)) continue;
-        const saved = store.get(k, null);  // tiles remembered from earlier this week draw straight away
+        // Tiles remembered from earlier this week draw straight away; pre-built tiles are always
+        // fetched fresh, since they change weekly and have more in them (USGS springs) than Overpass.
+        const saved = built.has(`${i}.${j}`) ? null : store.get(k, null);
         if (saved && Date.now() - saved.t < PLACE_KEEP) { draw(saved.s); done.add(k); }
         else missing.push([i, j]);
       }
     updateStats();
-    if (!missing.length) return;
-    P.busy = true;
+    if (!missing.length) { P.busy = false; return; }
     // Pre-built tiles (NY/NJ/CT) straight from the site; only what they don't cover goes to Overpass.
-    const built = await builtTiles(), remote = [];
     await Promise.all(missing.map(async ([i, j]) => {
       if (!built.has(`${i}.${j}`)) { remote.push([i, j]); return; }
       try {
